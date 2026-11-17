@@ -94,7 +94,10 @@ export const startTelemetry = async (connectionString: string | undefined): Prom
   }
   try {
     process.env.OTEL_SERVICE_NAME ||= "dtsse-doc-render";
-    const insights = await import("applicationinsights");
+    // applicationinsights is CommonJS: defaultClient is assigned by setup(), so read it from the live
+    // module object, not the ESM namespace snapshot taken at import time.
+    const imported = await import("applicationinsights");
+    const insights = imported.default ?? imported;
     insights
       .setup(connectionString)
       .setAutoCollectRequests(false)

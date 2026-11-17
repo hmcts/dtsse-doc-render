@@ -241,8 +241,15 @@ describe("startTelemetry", () => {
         setUseDiskRetryCaching: vi.fn().mockReturnThis(),
         start: vi.fn().mockReturnThis()
       };
-      const setup = vi.fn().mockReturnValue(configuration);
-      return { client, configuration, setup, module: { setup, defaultClient: client } };
+      // Shaped like the real CommonJS package: defaultClient only exists once setup() has run, and only on
+      // the live module object, so the ESM namespace's named export stays undefined.
+      const live: { setup: typeof setup; defaultClient?: typeof client } = { setup: undefined as never };
+      const setup = vi.fn(() => {
+        live.defaultClient = client;
+        return configuration;
+      });
+      live.setup = setup;
+      return { client, configuration, setup, module: { default: live, setup, defaultClient: undefined } };
     };
 
     let saved: string | undefined;
