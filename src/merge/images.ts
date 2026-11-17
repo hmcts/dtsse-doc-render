@@ -29,12 +29,12 @@ const IMAGE_FAULT = "Unable to get image properties for image  Suggestion 1:Chec
 const EMU_PER_TWIP = 635;
 
 const attr = (el: XEl, name: string): string | undefined => {
-  const m = new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(el.open);
+  const m = new RegExp(String.raw`\s${name}\s*=\s*(?:"([^"]*)"|'([^']*)')`).exec(el.open);
   return m ? decodeEntities(m[1] ?? m[2]!) : undefined;
 };
 
 function setAttr(el: XEl, name: string, value: string): void {
-  const re = new RegExp(`(\\s${name}\\s*=\\s*)(?:"[^"]*"|'[^']*')`);
+  const re = new RegExp(String.raw`(\s${name}\s*=\s*)(?:"[^"]*"|'[^']*')`);
   el.open = el.open.replace(re, `$1"${value}"`);
 }
 
@@ -269,7 +269,7 @@ export class ImageMerger {
     }
     const text = ctx.body ? `<<${job.field}>>Docmosis${++ctx.counter.n}` : `<<${job.field}>>${IMAGE_FAULT}`;
     const run = runOf(job.drawing);
-    const note = parseXml(`<w:r><w:t xml:space="preserve">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</w:t></w:r>`).children[0] as XEl;
+    const note = parseXml(`<w:r><w:t xml:space="preserve">${text.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</w:t></w:r>`).children[0] as XEl;
     if (run?.parent) {
       note.parent = run.parent;
       run.parent.children.splice(run.parent.children.indexOf(run), 0, note);
@@ -301,7 +301,8 @@ export class ImageMerger {
     this.types.set(picture.ext, picture.type);
     const { path, xml } = this.relsOf(part);
     const id = `rIdDr${this.added}`;
-    const rel = `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${name.startsWith(dirOf(part)) ? name.slice(dirOf(part).length) : `/${name}`}"/>`;
+    const target = name.startsWith(dirOf(part)) ? name.slice(dirOf(part).length) : `/${name}`;
+    const rel = `<Relationship Id="${id}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}"/>`;
     this.rels.set(path, xml.replace("</Relationships>", `${rel}</Relationships>`));
     return id;
   }
@@ -345,7 +346,7 @@ export class ImageMerger {
     if (types && this.types.size > 0) {
       let xml = strFromU8(types);
       for (const [ext, type] of this.types) {
-        if (!new RegExp(`<Default\\b[^>]*Extension\\s*=\\s*"${ext}"`, "i").test(xml)) {
+        if (!new RegExp(String.raw`<Default\b[^>]*Extension\s*=\s*"${ext}"`, "i").test(xml)) {
           xml = xml.replace("</Types>", `<Default Extension="${ext}" ContentType="${type}"/></Types>`);
         }
       }

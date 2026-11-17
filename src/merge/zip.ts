@@ -15,6 +15,8 @@ export interface ArchiveTally {
   total: number;
 }
 
+const newTally = (): ArchiveTally => ({ entries: 0, total: 0 });
+
 const mib = (n: number): string => `${Math.round(n / (1024 * 1024))} MiB`;
 
 /**
@@ -23,7 +25,7 @@ const mib = (n: number): string => `${Math.round(n / (1024 * 1024))} MiB`;
  * but carrying data would be inflated without a bound, so it is refused. The limits apply to the tally, so an include
  * counts against the same budget as the template that calls it.
  */
-export function unzipWithin(archive: Buffer, limits: Limits, tally: ArchiveTally = { entries: 0, total: 0 }): Record<string, Uint8Array> {
+export function unzipWithin(archive: Buffer, limits: Limits, tally: ArchiveTally = newTally()): Record<string, Uint8Array> {
   try {
     return unzipSync(new Uint8Array(archive.buffer, archive.byteOffset, archive.byteLength), {
       filter: (file) => {

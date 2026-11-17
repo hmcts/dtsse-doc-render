@@ -15,6 +15,8 @@ export interface Budget {
   bytes: number;
 }
 
+const newBudget = (): Budget => ({ limits: resolveLimits(), nodes: 0, bytes: 0 });
+
 function spend(ctx: Ctx, nodes: number, bytes: number): void {
   const b = ctx.budget;
   b.nodes += nodes;
@@ -434,7 +436,7 @@ function placeIncludes(parts: XEl[], refs: XEl[][]): XEl[] {
     }
     const nodes = refs[k++] ?? [];
     const list: XEl[] = [];
-    if (cur && cur.name === "w:p" && hasContent(cur)) {
+    if (cur?.name === "w:p" && hasContent(cur)) {
       if (nodes[0]?.name === "w:p") {
         absorb(cur, nodes[0]);
         list.push(cur, ...nodes.slice(1));
@@ -1117,7 +1119,12 @@ function listTags(children: XNode[]): Tag[] {
 function unclosedBracket(expr: string): boolean {
   let depth = 0;
   let quote = "";
-  const kindOf = (ch: string): string => ("'‘’".includes(ch) ? "'" : '"“”'.includes(ch) ? '"' : "");
+  const kindOf = (ch: string): string => {
+    if ("'‘’".includes(ch)) {
+      return "'";
+    }
+    return '"“”'.includes(ch) ? '"' : "";
+  };
   for (const ch of expr) {
     const kind = kindOf(ch);
     if (quote) {
@@ -1248,7 +1255,7 @@ export function renderPart(
   devMode: boolean,
   messages: string[],
   counter: { n: number } = { n: 0 },
-  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 },
+  budget: Budget = newBudget(),
   host?: IncludeHost,
   images?: ImageMerger
 ): string {

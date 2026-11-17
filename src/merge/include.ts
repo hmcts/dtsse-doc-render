@@ -41,16 +41,40 @@ interface Rel {
   external: boolean;
 }
 
+/** Removes the closing `</w:body>` that ends the text, and the whitespace before it. */
+export function dropBodyClose(text: string): string {
+  return text.endsWith("</w:body>") ? text.slice(0, -"</w:body>".length).trimEnd() : text;
+}
+
+/** Removes each `segment/../` pair from a path, left to right and without rescanning what is left. */
+export function collapseParentSegments(path: string): string {
+  const segments = path.split("/");
+  const kept: string[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    if (segments[i] !== "" && segments[i + 1] === ".." && i + 2 < segments.length) {
+      i++;
+    } else {
+      kept.push(segments[i]!);
+    }
+  }
+  return kept.join("/");
+}
+
+/** Turns the text of a self-closed opening tag into that of an open one: `<w:p />` becomes `<w:p>`. */
+export function openTagOfSelfClosed(open: string): string {
+  return open.endsWith("/>") ? `${open.slice(0, -2).trimEnd()}>` : open;
+}
+
 function attr(open: string, name: string): string | undefined {
-  const m = new RegExp(`\\s${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`).exec(open);
+  const m = new RegExp(String.raw`\s${name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}\s*=\s*(?:"([^"]*)"|'([^']*)')`).exec(open);
   return m ? (m[1] ?? m[2]) : undefined;
 }
 
 function setAttr(open: string, name: string, value: string): string {
-  return open.replace(new RegExp(`(\\s${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*=\\s*)(?:"[^"]*"|'[^']*')`), `$1"${value}"`);
+  return open.replace(new RegExp(String.raw`(\s${name.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`)}\s*=\s*)(?:"[^"]*"|'[^']*')`), `$1"${value}"`);
 }
 
-const escapeAttr = (s: string): string => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+const escapeAttr = (s: string): string => s.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
 
 function parseRels(xml: string): Rel[] {
   return [...xml.matchAll(/<Relationship\b[^>]*>/g)].flatMap((m) => {
@@ -186,7 +210,7 @@ export class IncludeHost {
   private readonly partRels = new Map<string, { xml: string; ids: Set<string> }>();
   private readonly changed = new Map<string, Uint8Array>();
   private mainStyles: XEl | null | undefined;
-  private mainStyleXml = new Map<string, string>();
+  private readonly mainStyleXml = new Map<string, string>();
   private mainDocDefaults = "";
   private mainDefault: string | undefined;
   private mainNumbering: XEl | null | undefined;
@@ -329,7 +353,7 @@ export class IncludeHost {
   }
 
   private addDefaultType(extension: string, contentType: string): void {
-    if (!new RegExp(`<Default\\b[^>]*\\sExtension="${extension}"`, "i").test(this.contentTypes)) {
+    if (!new RegExp(String.raw`<Default\b[^>]*\sExtension="${extension}"`, "i").test(this.contentTypes)) {
       this.contentTypes = this.contentTypes.replace("</Types>", `<Default Extension="${extension}" ContentType="${contentType}"/></Types>`);
     }
   }
@@ -343,13 +367,13 @@ export class IncludeHost {
   private mainSectPr(): string {
     const xml = this.text(DOC_PATH) ?? "";
     const m = /<w:sectPr\b(?:(?!<w:sectPr\b)[\s\S])*?<\/w:sectPr>\s*<\/w:body>/.exec(xml);
-    const found = m ? m[0].replace(/\s*<\/w:body>$/, "") : "<w:sectPr/>";
+    const found = m ? dropBodyClose(m[0]) : "<w:sectPr/>";
     return found.replace(/<w:(?:headerReference|footerReference)\b[^>]*\/>/g, "").replace(/<w:titlePg\b[^>]*\/>/g, "");
   }
 
   private scan(doc: IncludeDoc): Used {
     const used: Used = { styles: new Set(), numbers: new Set(), rels: new Set(), paragraphs: false };
-    const relAttr = doc.relPrefix ? new RegExp(`\\s${doc.relPrefix}:[\\w]+\\s*=\\s*"([^"]*)"`, "g") : null;
+    const relAttr = doc.relPrefix ? new RegExp(String.raw`\s${doc.relPrefix}:[\w]+\s*=\s*"([^"]*)"`, "g") : null;
     walk(
       doc.body,
       (el) => {
@@ -460,8 +484,10 @@ export class IncludeHost {
         continue;
       }
       let fresh = `${id}_${k}`;
-      for (let n = 2; taken.has(fresh); n++) {
+      let n = 2;
+      while (taken.has(fresh)) {
         fresh = `${id}_${k}_${n}`;
+        n++;
       }
       taken.add(fresh);
       map.set(id, fresh);
@@ -627,14 +653,14 @@ export class IncludeHost {
     if (cached) {
       return cached;
     }
-    const path = rel.target.startsWith("/") ? rel.target.slice(1) : `word/${rel.target}`.replace(/[^/]+\/\.\.\//g, "");
+    const path = rel.target.startsWith("/") ? rel.target.slice(1) : collapseParentSegments(`word/${rel.target}`);
     const bytes = doc.entries[path];
     if (!bytes) {
       throw new IncludeError(`${doc.name} refers to ${rel.target}, which it does not contain`);
     }
     const base = path.slice(path.lastIndexOf("/") + 1);
     const extension = base.includes(".") ? base.slice(base.lastIndexOf(".") + 1).toLowerCase() : "";
-    const fromDoc = new RegExp(`<Default\\b[^>]*\\sExtension="${extension}"[^>]*\\sContentType="([^"]*)"`, "i").exec(doc.contentTypes)?.[1];
+    const fromDoc = new RegExp(String.raw`<Default\b[^>]*\sExtension="${extension}"[^>]*\sContentType="([^"]*)"`, "i").exec(doc.contentTypes)?.[1];
     const contentType = fromDoc ?? IMAGE_TYPES[extension];
     if (!contentType) {
       throw new IncludeError(`${doc.name} has an image of an unknown type (${base})`);
@@ -652,7 +678,7 @@ export class IncludeHost {
     const styleMap = doc.styleMap!;
     const numberMap = doc.numberMap ?? this.importNumbering(doc, used, [], styleMap);
     const relMap = this.importRels(doc, part, used.rels);
-    const relAttr = doc.relPrefix ? new RegExp(`(\\s${doc.relPrefix}:\\w+\\s*=\\s*")([^"]*)(")`, "g") : null;
+    const relAttr = doc.relPrefix ? new RegExp(String.raw`(\s${doc.relPrefix}:\w+\s*=\s*")([^"]*)(")`, "g") : null;
     const body = cloneEl(doc.body);
     body.children = body.children.filter((c) => !(c.kind === "el" && c.name === "w:sectPr"));
     const sect = this.mainSectPr();
@@ -723,7 +749,7 @@ function docDefaultsStyle(docDefaults: string, id: string, k: number): string {
 function setDefaultStyle(p: XEl, styleId: string): void {
   if (p.selfClose) {
     p.selfClose = false;
-    p.open = p.open.replace(/\s*\/>$/, ">");
+    p.open = openTagOfSelfClosed(p.open);
   }
   const style = elementOf(`<w:pStyle w:val="${styleId}"/>`);
   const pPr = childEls(p, "w:pPr")[0];

@@ -3,12 +3,11 @@ import { cloneEl, encodeText, makeEl, makeText, textOf, type XEl } from "./xml.t
 
 /** A paragraph break inserted by a value. A `\n` in an inserted value ends the paragraph; the next one copies the paragraph properties. */
 export const SPLIT = "dr:split";
-/** Inserted-value characters: `\n` ends the paragraph, `\v` is a line break, `\f` ends the paragraph and the next one has default properties. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: \u0001 is the marker REF_BREAK inserts, which XML cannot carry
-const SEPARATOR = /(\r\n|\n|\r|\v|\f|\u0001)/;
-
 /** Inserted where an included template goes. XML cannot carry it, so no data value can forge one. */
 export const REF_BREAK = "\u0001";
+
+/** Inserted-value characters: `\n` ends the paragraph, `\v` is a line break, `\f` ends the paragraph and the next one has default properties. */
+const SEPARATOR = new RegExp(`(\\r\\n|\\n|\\r|\\v|\\f|${REF_BREAK})`);
 
 /** Stands in for a non-text run child (tab, break, drawing, field character) in a paragraph's joined text. */
 export const NODE_CHAR = "\uFFFC";

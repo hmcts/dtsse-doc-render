@@ -199,7 +199,8 @@ function renderBoolean(args: string[], value: unknown): string {
   }
   const pair = BOOLEAN_FORMATS[args[0]!.toLowerCase()];
   if (!pair) {
-    throw new RenderError(`Renderer:boolean unknown format: "${args[0]}".  Valid formats are: ${BOOLEAN_FORMAT_NAMES.map((n) => `"${n}"`).join(", ")}`);
+    const valid = BOOLEAN_FORMAT_NAMES.map((n) => `"${n}"`).join(", ");
+    throw new RenderError(`Renderer:boolean unknown format: "${args[0]}".  Valid formats are: ${valid}`);
   }
   return on ? pair[0] : pair[1];
 }
@@ -235,22 +236,42 @@ function parseNumber(value: unknown): { decimal: Decimal; text: string } | undef
     return decimal && { decimal, text: formatValue(value) };
   }
   const m = /^(-?)((?:\d|,)*)(?:\.(\d*))?/.exec(String(value));
-  const int = (m?.[2] ?? "").replace(/,/g, "").replace(/^0+(?=\d)/, "");
+  const int = (m?.[2] ?? "").replaceAll(",", "").replace(/^0+(?=\d)/, "");
   const frac = m?.[3] ?? "";
   if (!m || (int === "" && frac === "")) {
     return undefined;
   }
-  const text = `${m[1]}${int || "0"}${frac ? `.${frac}` : ""}`;
+  const fraction = frac ? `.${frac}` : "";
+  const text = `${m[1]}${int || "0"}${fraction}`;
   const decimal = Decimal.parse(text);
   return decimal && { decimal, text };
 }
 
+/** Puts a comma between each group of three digits, counting from the right. */
+export function groupThousands(digits: string): string {
+  const lead = digits.length % 3 || 3;
+  const groups = [digits.slice(0, lead)];
+  for (let i = lead; i < digits.length; i += 3) {
+    groups.push(digits.slice(i, i + 3));
+  }
+  return groups.join(",");
+}
+
+export function trimTrailingZeros(s: string): string {
+  let end = s.length;
+  while (end > 0 && s[end - 1] === "0") {
+    end--;
+  }
+  return s.slice(0, end);
+}
+
 function groupedDefault(d: Decimal): string {
   const [int = "0", frac = ""] = d.abs().toString().split(".");
-  const grouped = int.replace(/\B(?=(\d{3})+$)/g, ",");
-  const fraction = frac.replace(/0+$/, "");
+  const grouped = groupThousands(int);
+  const fraction = trimTrailingZeros(frac);
   const head = int === "0" && fraction !== "" ? "" : grouped;
-  return `${d.unscaled < 0n ? "-" : ""}${head}${fraction ? `.${fraction}` : ""}`;
+  const tail = fraction ? `.${fraction}` : "";
+  return `${d.unscaled < 0n ? "-" : ""}${head}${tail}`;
 }
 
 function renderNumber(args: string[], value: unknown): string {
@@ -279,7 +300,7 @@ function renderNumber(args: string[], value: unknown): string {
   }
   const percent = pattern.includes("%");
   const n = Number(parsed.decimal.toString());
-  return numFormat(percent ? n * 100 : n, pattern.replace(/¤/g, "$")) ?? "";
+  return numFormat(percent ? n * 100 : n, pattern.replaceAll("¤", "$")) ?? "";
 }
 
 /** Applies a renderer to a field's value. A name Docmosis does not know leaves the value as it is. */
