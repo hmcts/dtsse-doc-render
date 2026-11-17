@@ -14,7 +14,8 @@ info:
 
     Errors use the Docmosis shape: `{"succeeded": false, "shortMsg": "...", "longMsg": "..."}`.
 
-    The `/rs/*` and `/api/*` paths are the same operations. They are described once, under `components.pathItems`.
+    The `/rs/*` and `/api/*` paths are the same operations. Each `/api/*` operation has the `Api` suffix on its
+    `operationId`, and shares its request and response definitions with the `/rs/*` one.
   license:
     name: MIT
     identifier: MIT
@@ -41,6 +42,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Up"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
   /health/liveness:
     get:
       operationId: liveness
@@ -49,6 +52,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Up"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
   /health/readiness:
     get:
       operationId: readiness
@@ -57,6 +62,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Up"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
         "503":
           description: The converter is not ready.
           content:
@@ -79,30 +86,32 @@ paths:
                 type: string
         "404":
           $ref: "#/components/responses/NotFound"
+        "405":
+          $ref: "#/components/responses/MethodNotAllowed"
   /rs/status:
     $ref: "#/components/pathItems/Status"
   /api/status:
-    $ref: "#/components/pathItems/Status"
+    $ref: "#/components/pathItems/StatusApi"
   /rs/ping:
     $ref: "#/components/pathItems/Ping"
   /api/ping:
-    $ref: "#/components/pathItems/Ping"
+    $ref: "#/components/pathItems/PingApi"
   /rs/render:
     $ref: "#/components/pathItems/Render"
   /api/render:
-    $ref: "#/components/pathItems/Render"
+    $ref: "#/components/pathItems/RenderApi"
   /rs/convert:
     $ref: "#/components/pathItems/Convert"
   /api/convert:
-    $ref: "#/components/pathItems/Convert"
+    $ref: "#/components/pathItems/ConvertApi"
   /rs/getTemplateStructure:
     $ref: "#/components/pathItems/GetTemplateStructure"
   /api/getTemplateStructure:
-    $ref: "#/components/pathItems/GetTemplateStructure"
+    $ref: "#/components/pathItems/GetTemplateStructureApi"
   /rs/getSampleData:
     $ref: "#/components/pathItems/GetSampleData"
   /api/getSampleData:
-    $ref: "#/components/pathItems/GetSampleData"
+    $ref: "#/components/pathItems/GetSampleDataApi"
 components:
   pathItems:
     Status:
@@ -110,7 +119,7 @@ components:
         operationId: status
         tags: [Docmosis compatibility]
         summary: Whether the service can render
-        description: Answers any method. `ready` is false while LibreOffice cannot convert.
+        description: Answers GET only. `ready` is false while LibreOffice cannot convert.
         responses:
           "200":
             description: The service and its converter.
@@ -118,12 +127,14 @@ components:
               application/json:
                 schema:
                   $ref: "#/components/schemas/Status"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
     Ping:
       get:
         operationId: ping
         tags: [Docmosis compatibility]
         summary: Responds with the text `pong`
-        description: Answers any method.
+        description: Answers GET only.
         responses:
           "200":
             description: pong
@@ -132,6 +143,8 @@ components:
                 schema:
                   type: string
                   const: pong
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
     Render:
       post:
         operationId: render
@@ -147,52 +160,10 @@ components:
           `outputFormat` wins over the extension of `outputName`. Without `outputFormat`, `outputName` must end in a
           known extension, and defaults to `output.pdf`.
         requestBody:
-          required: true
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/RenderRequest"
-            multipart/form-data:
-              schema:
-                $ref: "#/components/schemas/RenderForm"
-              encoding:
-                templateFile:
-                  contentType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
-                include:
-                  contentType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
-                data:
-                  contentType: application/json
+          $ref: "#/components/requestBodies/Render"
         responses:
           "200":
-            description: The rendered document.
-            headers:
-              Content-Disposition:
-                description: An attachment named from `outputName`, with an RFC 5987 UTF-8 filename.
-                schema:
-                  type: string
-            content:
-              application/pdf:
-                schema:
-                  type: string
-                  format: binary
-              application/vnd.openxmlformats-officedocument.wordprocessingml.document:
-                schema:
-                  type: string
-                  format: binary
-              application/msword:
-                schema:
-                  type: string
-                  format: binary
-              application/vnd.oasis.opendocument.text:
-                schema:
-                  type: string
-                  format: binary
-              text/html:
-                schema:
-                  type: string
-              text/plain:
-                schema:
-                  type: string
+            $ref: "#/components/responses/Rendered"
           "400":
             $ref: "#/components/responses/BadRequest"
           "405":
@@ -210,26 +181,12 @@ components:
         summary: Convert an uploaded document to PDF
         description: |
           Accepts the document types LibreOffice can open from the uploaded file's extension (docx, doc, odt, rtf,
-          xlsx, pptx and the like). Types it does not accept are refused with a 500.
+          xlsx, pptx and the like). A type it does not accept, or a file whose content does not match its extension, is refused with a 400.
         requestBody:
-          required: true
-          content:
-            multipart/form-data:
-              schema:
-                $ref: "#/components/schemas/ConvertForm"
+          $ref: "#/components/requestBodies/Convert"
         responses:
           "200":
-            description: The PDF.
-            headers:
-              Content-Disposition:
-                description: An attachment named from `outputName`.
-                schema:
-                  type: string
-            content:
-              application/pdf:
-                schema:
-                  type: string
-                  format: binary
+            $ref: "#/components/responses/Converted"
           "400":
             $ref: "#/components/responses/BadRequest"
           "405":
@@ -248,6 +205,8 @@ components:
         responses:
           "501":
             $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
       post:
         operationId: getTemplateStructurePost
         tags: [Docmosis compatibility]
@@ -260,6 +219,8 @@ components:
         responses:
           "501":
             $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
     GetSampleData:
       get:
         operationId: getSampleData
@@ -268,6 +229,8 @@ components:
         responses:
           "501":
             $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
       post:
         operationId: getSampleDataPost
         tags: [Docmosis compatibility]
@@ -280,6 +243,139 @@ components:
         responses:
           "501":
             $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+    StatusApi:
+      get:
+        operationId: statusApi
+        tags: [Docmosis compatibility]
+        summary: Whether the service can render
+        description: Answers GET only. `ready` is false while LibreOffice cannot convert.
+        responses:
+          "200":
+            description: The service and its converter.
+            content:
+              application/json:
+                schema:
+                  $ref: "#/components/schemas/Status"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+    PingApi:
+      get:
+        operationId: pingApi
+        tags: [Docmosis compatibility]
+        summary: Responds with the text `pong`
+        description: Answers GET only.
+        responses:
+          "200":
+            description: pong
+            content:
+              text/plain:
+                schema:
+                  type: string
+                  const: pong
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+    RenderApi:
+      post:
+        operationId: renderApi
+        tags: [Rendering]
+        summary: Merge a template with data and return the document
+        description: |
+          The template travels with the request. Send JSON (`templateBase64`), a multipart form (`templateFile`),
+          or a form-urlencoded body with the same fields as the JSON one.
+
+          A template that does not merge cleanly is a 400, unless `devMode` is true, which returns the document
+          with the merge problems written into it.
+
+          `outputFormat` wins over the extension of `outputName`. Without `outputFormat`, `outputName` must end in a
+          known extension, and defaults to `output.pdf`.
+        requestBody:
+          $ref: "#/components/requestBodies/Render"
+        responses:
+          "200":
+            $ref: "#/components/responses/Rendered"
+          "400":
+            $ref: "#/components/responses/BadRequest"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+          "413":
+            $ref: "#/components/responses/TooLarge"
+          "500":
+            $ref: "#/components/responses/ServerError"
+          "503":
+            $ref: "#/components/responses/Busy"
+    ConvertApi:
+      post:
+        operationId: convertApi
+        tags: [Rendering]
+        summary: Convert an uploaded document to PDF
+        description: |
+          Accepts the document types LibreOffice can open from the uploaded file's extension (docx, doc, odt, rtf,
+          xlsx, pptx and the like). A type it does not accept, or a file whose content does not match its extension, is refused with a 400.
+        requestBody:
+          $ref: "#/components/requestBodies/Convert"
+        responses:
+          "200":
+            $ref: "#/components/responses/Converted"
+          "400":
+            $ref: "#/components/responses/BadRequest"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+          "413":
+            $ref: "#/components/responses/TooLarge"
+          "500":
+            $ref: "#/components/responses/ServerError"
+          "503":
+            $ref: "#/components/responses/Busy"
+    GetTemplateStructureApi:
+      get:
+        operationId: getTemplateStructureApi
+        tags: [Docmosis compatibility]
+        summary: Not implemented
+        responses:
+          "501":
+            $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+      post:
+        operationId: getTemplateStructurePostApi
+        tags: [Docmosis compatibility]
+        summary: Not implemented
+        requestBody:
+          content:
+            application/json:
+              schema:
+                type: object
+        responses:
+          "501":
+            $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+    GetSampleDataApi:
+      get:
+        operationId: getSampleDataApi
+        tags: [Docmosis compatibility]
+        summary: Not implemented
+        responses:
+          "501":
+            $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
+      post:
+        operationId: getSampleDataPostApi
+        tags: [Docmosis compatibility]
+        summary: Not implemented
+        requestBody:
+          content:
+            application/json:
+              schema:
+                type: object
+        responses:
+          "501":
+            $ref: "#/components/responses/NotImplemented"
+          "405":
+            $ref: "#/components/responses/MethodNotAllowed"
   schemas:
     OutputFormat:
       type: string
@@ -385,7 +481,72 @@ components:
         outputName:
           type: string
           default: output.pdf
+  requestBodies:
+    Render:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RenderRequest"
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/RenderForm"
+            encoding:
+              templateFile:
+                contentType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+              include:
+                contentType: application/vnd.openxmlformats-officedocument.wordprocessingml.document
+              data:
+                contentType: application/json
+    Convert:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/ConvertForm"
   responses:
+    Rendered:
+        description: The rendered document.
+        headers:
+          Content-Disposition:
+            description: An attachment named from `outputName`, with an RFC 5987 UTF-8 filename.
+            schema:
+              type: string
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+          application/vnd.openxmlformats-officedocument.wordprocessingml.document:
+            schema:
+              type: string
+              format: binary
+          application/msword:
+            schema:
+              type: string
+              format: binary
+          application/vnd.oasis.opendocument.text:
+            schema:
+              type: string
+              format: binary
+          text/html:
+            schema:
+              type: string
+          text/plain:
+            schema:
+              type: string
+    Converted:
+        description: The PDF.
+        headers:
+          Content-Disposition:
+            description: An attachment named from `outputName`.
+            schema:
+              type: string
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
     Up:
       description: Up.
       content:
@@ -411,7 +572,13 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
     MethodNotAllowed:
-      description: The method is neither GET nor POST.
+      description: The path does not answer this method. The `Allow` header lists the ones it does.
+      headers:
+        Allow:
+          description: The methods the path answers.
+          schema:
+            type: string
+          example: POST
       content:
         application/json:
           schema:

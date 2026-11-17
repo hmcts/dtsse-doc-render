@@ -18,7 +18,7 @@ yarn start        # listens on $PORT, default 8080
 
 ## Endpoints
 
-Every `/rs/*` endpoint is also served under `/api/*`. Errors are `{"succeeded":false,"shortMsg":...,"longMsg":...}`.
+Every `/rs/*` endpoint is also served under `/api/*`. A path answers only the methods listed below; any other method gets 405 with an `Allow` header. Errors are `{"succeeded":false,"shortMsg":...,"longMsg":...}`.
 
 | Endpoint | Behaviour |
 | --- | --- |
@@ -104,9 +104,9 @@ On every push to `master` that changes it, `.github/workflows/publish-openapi.ya
 
 ## Telemetry
 
-Application Insights is on when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, which the chart reads from the `dtsse` key vault (`AppInsightsConnectionString`), and off when it is not, as locally and in tests. `src/server.ts` starts it before anything else loads.
+Application Insights is on when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, which the chart reads from the `dtsse` key vault (`AppInsightsConnectionString`), and off when it is not, as locally and in tests. The cloud role is `OTEL_SERVICE_NAME`, which the chart sets to the release name so AAT, staging and each preview are told apart; it is `dtsse-doc-render` when unset. The server sends what is queued on SIGTERM and SIGINT, waiting at most 5 seconds.
 
-It records, for each request, the route (never the query string or an unknown path), status and duration, plus unhandled exceptions with their stack but not their message. Custom telemetry:
+It records, for each request, the route (never the query string or an unknown path), status and duration (499 when the client disconnected before the response was written), plus uncaught exceptions and unhandled rejections with their stack but not their message. Either one still ends the process with exit code 1, whether or not Application Insights is on. Custom telemetry:
 
 | Name | Kind | Dimension |
 | --- | --- | --- |
@@ -116,6 +116,7 @@ It records, for each request, the route (never the query string or an unknown pa
 | `limit.tripped` | event | `type`: `body`, `includes`, `entries`, `entryBytes`, `totalBytes`, `outputNodes`, `outputBytes` or `repeatItems` |
 | `libreoffice.timeout` | event | |
 | `conversion.failed` | event | |
+| `conversion.rejected` | event | `reason`: `source_type`, `target_format` or `content_mismatch`, for a document or format refused before LibreOffice runs, answered with 400 |
 | `conversion.busy` | event | |
 
 Templates, data, file names and error messages are never sent, and console output is not collected.

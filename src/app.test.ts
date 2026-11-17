@@ -1,8 +1,9 @@
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import net from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createHandler, type Dependencies } from "./app.ts";
-import { ConversionError } from "./convert.ts";
+import { createHandler, type Dependencies, ROUTES } from "./app.ts";
+import { ConversionError, ConversionInputError } from "./convert.ts";
 import { MergeError } from "./merge/index.ts";
 
 const DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -104,6 +105,45 @@ describe("routing", () => {
     const { base } = await start();
     const response = await fetch(`${base}/rs/render`, { method: "DELETE" });
     expect(response.status).toBe(405);
+    expect(response.headers.get("allow")).toBe("POST");
+    expect(await read(response)).toMatchObject({ succeeded: false, shortMsg: "Method not allowed" });
+  });
+
+  it("answers exactly the methods in the route table on every path", async () => {
+    const { base } = await start();
+    const paths = [...new Set(ROUTES.map((route) => route.path))];
+    for (const path of paths) {
+      const allowed = ROUTES.filter((route) => route.path === path).map((route) => route.method);
+      for (const method of ["GET", "POST", "PUT", "DELETE", "HEAD"]) {
+        const response = await fetch(base + path, { method, body: method === "POST" ? form({}) : undefined });
+        if (allowed.includes(method as "GET" | "POST")) {
+          expect(response.status, `${method} ${path}`).not.toBe(405);
+        } else {
+          expect(response.status, `${method} ${path}`).toBe(405);
+          expect(response.headers.get("allow"), `${method} ${path}`).toBe(allowed.join(", "));
+        }
+      }
+    }
+  });
+
+  it("answers 405 to a GET on render and convert, and to a POST on status and ping", async () => {
+    const { base } = await start();
+    for (const path of ["/rs/render", "/api/render", "/rs/convert", "/api/convert"]) {
+      expect((await fetch(base + path)).status, path).toBe(405);
+    }
+    for (const path of ["/rs/status", "/api/status", "/rs/ping", "/api/ping"]) {
+      expect((await fetch(base + path, { method: "POST" })).status, path).toBe(405);
+    }
+  });
+
+  it("answers 404, not 500, for a request target that is not a URL", async () => {
+    const { base } = await start();
+    const url = new URL(base);
+    const status = await new Promise<number | undefined>((resolve) => {
+      const socket = net.connect(Number(url.port), url.hostname, () => socket.write("GET // HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"));
+      socket.on("data", (chunk) => resolve(Number(/HTTP\/1\.1 (\d+)/.exec(chunk.toString())?.[1])));
+    });
+    expect(status).toBe(404);
   });
 
   it("defaults a missing method and url", async () => {
@@ -463,6 +503,14 @@ describe("convert", () => {
     const response = await fetch(`${base}/rs/convert`, { method: "POST", body: form({}, { field: "file", name: "noext", content: "X" }) });
     expect(response.headers.get("content-disposition")).toBe("attachment; filename=\"output.pdf\"; filename*=UTF-8''output.pdf");
     expect(deps.convert).toHaveBeenCalledWith(Buffer.from("X"), "docx");
+  });
+
+  it.each(["source_type", "target_format", "content_mismatch"] as const)("returns 400 for an input the converter refuses (%s)", async (reason) => {
+    const refused = new ConversionInputError("not convertible", reason);
+    const { base } = await start({ convert: vi.fn().mockRejectedValue(refused) });
+    const response = await fetch(`${base}/rs/convert`, { method: "POST", body: form({}, { field: "file", name: "a.docx", content: "X" }) });
+    expect(response.status).toBe(400);
+    expect(await read(response)).toMatchObject({ succeeded: false, shortMsg: "Unsupported document", longMsg: "not convertible" });
   });
 
   it("returns 400 without a file", async () => {

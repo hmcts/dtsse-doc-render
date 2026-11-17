@@ -57,6 +57,17 @@ describe("openapi.yaml", () => {
     expect(documented().sort()).toEqual(routes);
   });
 
+  it("gives every operation its own operationId", () => {
+    const ids = [...spec.matchAll(/^\s+operationId: (\w+)$/gm)].map((match) => match[1]);
+    expect(ids.length).toBeGreaterThan(0);
+    expect(ids.filter((id, index) => ids.indexOf(id) !== index)).toEqual([]);
+  });
+
+  it("documents a 405 for every operation", () => {
+    const operations = [...spec.matchAll(/^\s+operationId: /gm)].length;
+    expect([...spec.matchAll(/^\s+"405":$/gm)]).toHaveLength(operations);
+  });
+
   it("is OpenAPI 3.1", () => {
     expect(spec).toMatch(/^openapi: 3\.1\.\d+$/m);
   });

@@ -1,14 +1,13 @@
 import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import type { ConvertTarget } from "./convert.ts";
+import { createHandler } from "./app.ts";
+import { type ConvertTarget, converterReady, convertTo, convertToPdf } from "./convert.ts";
+import { mergeDocx } from "./merge/index.ts";
 import { startTelemetry } from "./telemetry.ts";
 
-// Application Insights has to start before anything else loads, or it disables the loggers created ahead of it.
-const telemetry = await startTelemetry(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING);
+const SHUTDOWN_FLUSH_MS = 5000;
 
-const { createHandler } = await import("./app.ts");
-const { converterReady, convertTo, convertToPdf } = await import("./convert.ts");
-const { mergeDocx } = await import("./merge/index.ts");
+const telemetry = await startTelemetry(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING);
 
 const port = Number(process.env.PORT ?? 8080);
 
@@ -30,7 +29,9 @@ server.listen(port, () => {
 });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => {
-    server.close(() => process.exit(0));
+  process.once(signal, () => {
+    server.close(() => {
+      void telemetry.flush(SHUTDOWN_FLUSH_MS).finally(() => process.exit(0));
+    });
   });
 }

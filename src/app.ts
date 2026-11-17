@@ -1,6 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import busboy from "busboy";
-import { ConversionError } from "./convert.ts";
+import { ConversionError, ConversionInputError } from "./convert.ts";
 import { MergeError, type MergeOptions } from "./merge/index.ts";
 import { noTelemetry, type Telemetry } from "./telemetry.ts";
 
@@ -18,31 +18,54 @@ const MIME: Record<string, string> = {
 const CONVERTED_FORMATS = ["doc", "odt", "html", "txt"];
 const KNOWN_EXTENSIONS = ["pdf", "docx", ...CONVERTED_FORMATS];
 
-const PREFIXES = ["rs", "api"];
+type Method = "GET" | "POST";
 
-/** The Docmosis operations served under each prefix, with the methods openapi.yaml documents for them. */
-const OPERATIONS: Record<string, string[]> = {
-  status: ["GET"],
-  ping: ["GET"],
-  render: ["POST"],
-  convert: ["POST"],
-  getTemplateStructure: ["GET", "POST"],
-  getSampleData: ["GET", "POST"]
-};
+type Operation = "health" | "liveness" | "readiness" | "openapi" | "status" | "ping" | "render" | "convert" | "getTemplateStructure" | "getSampleData";
 
-/** Every route the service answers. openapi.yaml must document exactly these; app.openapi.test.ts checks it. */
-export const ROUTES: ReadonlyArray<{ method: string; path: string }> = [
-  { method: "GET", path: "/health" },
-  { method: "GET", path: "/health/liveness" },
-  { method: "GET", path: "/health/readiness" },
-  { method: "GET", path: "/openapi.yaml" },
-  ...PREFIXES.flatMap((prefix) =>
-    Object.entries(OPERATIONS).flatMap(([operation, methods]) => methods.map((method) => ({ method, path: `/${prefix}/${operation}` })))
+interface Route {
+  method: Method;
+  path: string;
+  operation: Operation;
+}
+
+/** The Docmosis operations served under both prefixes, with the methods a Docmosis client uses for them. */
+const DOCMOSIS_OPERATIONS: ReadonlyArray<readonly [Operation, readonly Method[]]> = [
+  ["status", ["GET"]],
+  ["ping", ["GET"]],
+  ["render", ["POST"]],
+  ["convert", ["POST"]],
+  ["getTemplateStructure", ["GET", "POST"]],
+  ["getSampleData", ["GET", "POST"]]
+];
+
+/** Every route the service answers. The handler dispatches from this table, and openapi.yaml must document exactly these; openapi.test.ts checks it. */
+export const ROUTES: readonly Route[] = [
+  { method: "GET", path: "/health", operation: "health" },
+  { method: "GET", path: "/health/liveness", operation: "liveness" },
+  { method: "GET", path: "/health/readiness", operation: "readiness" },
+  { method: "GET", path: "/openapi.yaml", operation: "openapi" },
+  ...["rs", "api"].flatMap((prefix) =>
+    DOCMOSIS_OPERATIONS.flatMap(([operation, methods]) => methods.map((method) => ({ method, path: `/${prefix}/${operation}`, operation })))
   )
 ];
 
-const routeLabel = (method: string, path: string): string =>
-  ROUTES.some((route) => route.path === path) ? `${method === "GET" || method === "POST" ? method : "OTHER"} ${path}` : "unmatched";
+const routesByPath = new Map<string, Route[]>();
+for (const route of ROUTES) {
+  routesByPath.set(route.path, [...(routesByPath.get(route.path) ?? []), route]);
+}
+
+/** The path of the request target, parsed as the router parses it; undefined for a target that is not a valid URL. */
+const pathOf = (request: IncomingMessage): string | undefined => {
+  try {
+    return new URL(request.url ?? "/", "http://localhost").pathname;
+  } catch {
+    return undefined;
+  }
+};
+
+const boundedMethod = (method: string): string => (method === "GET" || method === "POST" ? method : "_OTHER");
+
+const routeOf = (path: string | undefined): string => (path !== undefined && routesByPath.has(path) ? path : "unmatched");
 
 export interface Dependencies {
   merge: (template: Buffer, data: unknown, options: MergeOptions) => Promise<Buffer>;
@@ -73,7 +96,8 @@ class HttpError extends Error {
     readonly status: number,
     readonly shortMsg: string,
     readonly longMsg: string = shortMsg,
-    readonly headers: Record<string, string> = {}
+    readonly headers: Record<string, string> = {},
+    readonly limit?: "body" | "includes"
   ) {
     super(shortMsg);
   }
@@ -98,7 +122,7 @@ const sendError = (response: ServerResponse, error: HttpError): void => {
 };
 
 const readBody = async (request: IncomingMessage, limit: number): Promise<Buffer> => {
-  const tooLarge = new HttpError(413, "Request body too large", `Request bodies are limited to ${limit} bytes`);
+  const tooLarge = new HttpError(413, "Request body too large", `Request bodies are limited to ${limit} bytes`, {}, "body");
   if (Number(request.headers["content-length"] ?? 0) > limit) {
     throw tooLarge;
   }
@@ -117,7 +141,7 @@ const readBody = async (request: IncomingMessage, limit: number): Promise<Buffer
 const parseMultipart = (body: Buffer, contentType: string, limit: number): Promise<ParsedRequest> =>
   new Promise((resolve, reject) => {
     const parsed: ParsedRequest = { params: {}, files: {}, includeFiles: [] };
-    const tooLarge = new HttpError(413, "Request body too large", `Request bodies are limited to ${limit} bytes`);
+    const tooLarge = new HttpError(413, "Request body too large", `Request bodies are limited to ${limit} bytes`, {}, "body");
     let parser: busboy.Busboy;
     try {
       parser = busboy({ headers: { "content-type": contentType }, limits: { fieldSize: limit, fileSize: limit } });
@@ -271,7 +295,7 @@ const includesOf = ({ params, includeFiles }: ParsedRequest): Record<string, Buf
     included[file.filename] = zipOf(file.content, file.filename);
   }
   if (Object.keys(included).length > MAX_INCLUDES) {
-    throw new HttpError(400, "Too many includes", `A request may carry at most ${MAX_INCLUDES} includes`);
+    throw new HttpError(400, "Too many includes", `A request may carry at most ${MAX_INCLUDES} includes`, {}, "includes");
   }
   return included;
 };
@@ -296,6 +320,9 @@ const contentDisposition = (name: string): string => {
   const encoded = encodeURIComponent(name).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`);
   return `attachment; filename="${fallback}"; filename*=UTF-8''${encoded}`;
 };
+
+/** The status recorded for a request whose client went away before the response was written; nginx's code, never sent on the wire. */
+const CLIENT_CLOSED_REQUEST = 499;
 
 export const createHandler = (deps: Dependencies) => {
   const { merge, convert, convertTo, ready, openapi } = deps;
@@ -354,68 +381,66 @@ export const createHandler = (deps: Dependencies) => {
 
   const converterIsReady = async (): Promise<boolean> => (ready ? await ready() : true);
 
-  const status = async (response: ServerResponse): Promise<void> => {
+  const status = async (_request: IncomingMessage, response: ServerResponse): Promise<void> => {
     sendJson(response, 200, { ready: await converterIsReady(), service: "dtsse-doc-render", engine: "libreoffice" });
   };
 
-  const route = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
-    const method = request.method ?? "GET";
-    const url = new URL(request.url ?? "/", "http://localhost");
-    const path = url.pathname;
-
-    if (method === "GET" && (path === "/health" || path === "/health/liveness")) {
-      sendJson(response, 200, { status: "UP" });
-      return;
-    }
-
-    if (method === "GET" && path === "/openapi.yaml") {
+  const handlers: Record<Operation, (request: IncomingMessage, response: ServerResponse) => Promise<void> | void> = {
+    health: (_request, response) => sendJson(response, 200, { status: "UP" }),
+    liveness: (_request, response) => sendJson(response, 200, { status: "UP" }),
+    readiness: async (_request, response) => {
+      const up = await converterIsReady();
+      sendJson(response, up ? 200 : 503, { status: up ? "UP" : "DOWN" });
+    },
+    openapi: (_request, response) => {
       if (openapi === undefined) {
         sendJson(response, 404, { succeeded: false, shortMsg: "Not found", longMsg: "No OpenAPI document is configured" });
       } else {
         sendBytes(response, 200, { "content-type": "application/yaml; charset=utf-8" }, openapi);
       }
-      return;
+    },
+    status,
+    ping: (_request, response) => sendBytes(response, 200, { "content-type": "text/plain" }, "pong"),
+    render: async (request, response) => render(await parseBody(request, limit), response),
+    convert: async (request, response) => convertFile(await parseBody(request, limit), response),
+    getTemplateStructure: async (request, response) => {
+      await drainBody(request);
+      notSupported(response);
+    },
+    getSampleData: async (request, response) => {
+      await drainBody(request);
+      notSupported(response);
     }
+  };
 
-    if (method === "GET" && path === "/health/readiness") {
-      const up = await converterIsReady();
-      sendJson(response, up ? 200 : 503, { status: up ? "UP" : "DOWN" });
-      return;
+  const drainBody = async (request: IncomingMessage): Promise<void> => {
+    if (request.method === "POST") {
+      await parseBody(request, limit);
     }
+  };
 
-    const operation = /^\/(?:rs|api)\/([A-Za-z]+)$/.exec(path)?.[1];
-    if (operation === "status") {
-      await status(response);
+  const route = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    const method = request.method ?? "GET";
+    const path = pathOf(request);
+    const candidates = path === undefined ? undefined : routesByPath.get(path);
+    if (!candidates) {
+      sendJson(response, 404, { succeeded: false, shortMsg: "Not found", longMsg: `No such endpoint: ${method} ${path ?? request.url}` });
       return;
     }
-    if (operation === "ping") {
-      sendBytes(response, 200, { "content-type": "text/plain" }, "pong");
-      return;
+    const match = candidates.find((candidate) => candidate.method === method);
+    if (!match) {
+      throw new HttpError(405, "Method not allowed", `${method} is not supported for ${path}`, {
+        allow: candidates.map((candidate) => candidate.method).join(", ")
+      });
     }
-    const handlers: Record<string, (parsed: ParsedRequest, res: ServerResponse) => Promise<void> | void> = {
-      render,
-      convert: convertFile,
-      getTemplateStructure: (_parsed, res) => notSupported(res),
-      getSampleData: (_parsed, res) => notSupported(res)
-    };
-    const handle = operation && Object.hasOwn(handlers, operation) ? handlers[operation] : undefined;
-    if (!handle) {
-      sendJson(response, 404, { succeeded: false, shortMsg: "Not found", longMsg: `No such endpoint: ${method} ${path}` });
-      return;
-    }
-    if (method !== "POST" && method !== "GET") {
-      throw new HttpError(405, "Method not allowed", `${method} is not supported for ${path}`);
-    }
-
-    const parsed = method === "POST" ? await parseBody(request, limit) : { params: {}, files: {}, includeFiles: [] };
-    await handle(parsed, response);
+    await handlers[match.operation](request, response);
   };
 
   const record = (error: unknown): void => {
     if (error instanceof HttpError) {
       if (error.status === 413) {
         telemetry.event("limit.tripped", { type: "body" });
-      } else if (error.shortMsg === "Too many includes") {
+      } else if (error.limit === "includes") {
         telemetry.event("limit.tripped", { type: "includes" });
       }
     } else if (error instanceof Error && error.name === "ConversionBusyError") {
@@ -425,6 +450,8 @@ export const createHandler = (deps: Dependencies) => {
       if (error.limit) {
         telemetry.event("limit.tripped", { type: error.limit });
       }
+    } else if (error instanceof ConversionInputError) {
+      telemetry.event("conversion.rejected", { reason: error.reason });
     } else if (error instanceof ConversionError) {
       telemetry.event(error.timedOut ? "libreoffice.timeout" : "conversion.failed");
       telemetry.exception(error);
@@ -435,8 +462,21 @@ export const createHandler = (deps: Dependencies) => {
 
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
     const started = performance.now();
-    const label = routeLabel(request.method ?? "GET", (request.url ?? "/").split("?")[0] ?? "/");
-    response.on("close", () => telemetry.request(label, response.statusCode, performance.now() - started));
+    const method = boundedMethod(request.method ?? "GET");
+    const routeName = routeOf(pathOf(request));
+    let reported = false;
+    const report = (status: number, success: boolean): void => {
+      if (!reported) {
+        reported = true;
+        telemetry.request({ method, route: routeName, status, durationMs: performance.now() - started, success });
+      }
+    };
+    response.on("finish", () => report(response.statusCode, response.statusCode < 500));
+    response.on("close", () => {
+      if (!response.writableFinished) {
+        report(CLIENT_CLOSED_REQUEST, false);
+      }
+    });
     try {
       await route(request, response);
     } catch (error) {
@@ -451,6 +491,8 @@ export const createHandler = (deps: Dependencies) => {
         sendError(response, new HttpError(503, "Conversion queue is full", error.message, { "retry-after": "5" }));
       } else if (error instanceof MergeError) {
         sendError(response, new HttpError(400, error.details[0] ?? error.message, [error.message, ...error.details].join("\n")));
+      } else if (error instanceof ConversionInputError) {
+        sendError(response, new HttpError(400, "Unsupported document", error.message));
       } else if (error instanceof ConversionError) {
         sendError(response, new HttpError(500, "Conversion failed", error.message));
       } else {
