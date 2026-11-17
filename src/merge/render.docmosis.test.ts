@@ -276,6 +276,14 @@ describe("structural validation", () => {
     expect(await texts(para("<<cs_claim.type>>a<<es_claim.type>>b<<cs_t>>c<<es_>>"), { ...data, claim: { type: true } })).toEqual(["abc"]);
   });
 
+  it("treats straight and curly single quotes as the same in an end tag's name, but not double quotes or spacing", async () => {
+    const open = "<<cs_{t=‘Yes’}>>a";
+    expect(await texts(para(`${open}<<es_{t=’Yes’}>>`), { t: "Yes" })).toEqual(["a"]);
+    expect(await texts(para("<<cs_{t='Yes'}>>a<<es_{t=‘Yes’}>>"), { t: "Yes" })).toEqual(["a"]);
+    expect((await fails(para(`${open}<<es_{t = ‘Yes’}>>`)))[0]).toContain("Mismatched sections");
+    expect((await fails(para('<<cs_{t=“Yes”}>>a<<es_{t="Yes"}>>')))[0]).toContain("Mismatched sections");
+  });
+
   it("rejects a repeat closed by a differently named end", async () => {
     expect((await fails(para("<<rs_items>>a<<es_other>>")))[0]).toContain("Mismatched sections");
   });
@@ -321,6 +329,7 @@ describe("structural validation", () => {
   it("rejects an expression with a bracket that is never closed", async () => {
     expect((await fails(para("<<{toUpperCase(name}>>")))[0]).toContain("Function is not closed");
     expect(await texts(para("<<{toUpperCase(name)}>> <<{'(' + name}>> <<{‘(’}>>"), data)).toEqual(["N (N ("]);
+    expect(await texts(para("<<{ifBlank(‘ vs ‘, ’(‘)}>>"), data)).toEqual([" vs "]);
   });
 
   it("marks each fault in devMode and leaves every tag as written", async () => {

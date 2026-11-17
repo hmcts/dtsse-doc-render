@@ -1,5 +1,7 @@
 import { ExpressionError, LimitError } from "./errors.ts";
 import { evaluate, formatValue, type Instruction, repeatItems, type Scope, truthy } from "./expr.ts";
+import { dropFirstPageStyles, removedFirsts } from "./headers.ts";
+import type { ImageMerger } from "./images.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
 import { type Found, hasContent, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, stripIllegalXml, type XEl, type XNode } from "./xml.ts";
@@ -897,7 +899,10 @@ const tagName = (body: string): string => body.trim().replace(/^[a-z]+_\s*/i, ""
 function sectionEnd(open: { body: string; para: Para; f: Found }, end: { body: string }): string | null {
   const wanted = tagName(end.body);
   const have = tagName(open.body);
-  return wanted !== "" && wanted !== have ? `Mismatched sections.  Expecting section end for section "${have}" but end is for section "${wanted}"` : null;
+  const singleQuotes = (s: string): string => s.replace(/[‘’]/g, "'");
+  return wanted !== "" && singleQuotes(wanted) !== singleQuotes(have)
+    ? `Mismatched sections.  Expecting section end for section "${have}" but end is for section "${wanted}"`
+    : null;
 }
 
 interface Tag {
@@ -959,17 +964,17 @@ function listTags(children: XNode[]): Tag[] {
   return tags;
 }
 
-/** Counts brackets outside quotes: true when an opening bracket is never closed. */
+/** Counts brackets outside quotes: true when an opening bracket is never closed. Word's curly quotes close a quote with either mark of the same kind. */
 function unclosedBracket(expr: string): boolean {
   let depth = 0;
   let quote = "";
+  const kindOf = (ch: string): string => ("'‘’".includes(ch) ? "'" : '"“”'.includes(ch) ? '"' : "");
   for (const ch of expr) {
+    const kind = kindOf(ch);
     if (quote) {
-      quote = ch === quote ? "" : quote;
-    } else if ("'\"".includes(ch)) {
-      quote = ch;
-    } else if (ch === "‘" || ch === "“") {
-      quote = ch === "‘" ? "’" : "”";
+      quote = kind === quote ? "" : quote;
+    } else if (kind) {
+      quote = kind;
     } else if (ch === "(") {
       depth++;
     } else if (ch === ")") {
@@ -1092,7 +1097,8 @@ export function renderPart(
   devMode: boolean,
   messages: string[],
   counter: { n: number } = { n: 0 },
-  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 }
+  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 },
+  images?: ImageMerger
 ): string {
   const doc = parseXml(xml);
   const root = childEls(doc)[0];
@@ -1106,7 +1112,10 @@ export function renderPart(
     reportIssues(issues, ctx);
     return serializeXml(doc);
   }
+  const firsts = container.name === "w:body" ? removedFirsts(container) : [];
   container.children = processList(container.children, scope, ctx);
+  dropFirstPageStyles(container, firsts);
+  images?.apply(container, scope, { devMode, messages, body: ctx.body, counter, part });
   if (container.name === "w:body") {
     endWithParagraph(container);
   }

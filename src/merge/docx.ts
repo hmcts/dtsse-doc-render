@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, unzipSync, type Zippable, zipSync } from "fflate";
 import { LimitError } from "./errors.ts";
 import { Scope } from "./expr.ts";
+import { ImageMerger } from "./images.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
 import { renderPart } from "./render.ts";
 
@@ -69,9 +70,10 @@ export function renderDocx(template: Buffer, data: unknown, options: { devMode: 
   const rendered = new Map<string, Uint8Array>();
   const counter = { n: 0 };
   const budget = { limits, nodes: 0, bytes: 0 };
+  const images = new ImageMerger(entries);
   try {
     for (const name of parts) {
-      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget)));
+      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget, images)));
     }
   } catch (e) {
     if (e instanceof LimitError) {
@@ -79,8 +81,10 @@ export function renderDocx(template: Buffer, data: unknown, options: { devMode: 
     }
     throw new DocxFormatError(`${e instanceof Error ? e.message : String(e)}`);
   }
+  images.finish();
   const mtime = options.now ?? new Date();
-  const ordered = [...names.filter((n) => n === "[Content_Types].xml"), ...names.filter((n) => n !== "[Content_Types].xml")];
+  const all = Object.keys(entries);
+  const ordered = [...all.filter((n) => n === "[Content_Types].xml"), ...all.filter((n) => n !== "[Content_Types].xml")];
   const files: Zippable = {};
   for (const name of ordered) {
     const data = rendered.get(name) ?? entries[name]!;
