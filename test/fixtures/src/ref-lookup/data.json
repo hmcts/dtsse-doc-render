@@ -1,0 +1,19 @@
+{
+  "letter": {
+    "header": "ref-lookup-header.docx"
+  },
+  "owner": "Registry",
+  "documents": [
+    {
+      "template": "ref-lookup-order.docx",
+      "title": "Order"
+    },
+    {
+      "freeText": "Free text only"
+    },
+    {
+      "template": "ref-lookup-notice.docx",
+      "title": "Notice"
+    }
+  ]
+}

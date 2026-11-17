@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<ref:ref-circular-a.docx>> Template Circular Reference: template [ref-circular-b.docx] is calling [ref-circular-a.docx]  Suggestion 1:Ensure there are no "loops" in template referencing.   Suggestion 2:Break this template Chain: [ref-circular-a.docx -> par__ref-circular_1794916548790_0ze1.docx -> ref-circular-b.docx -> ref-circular-a.docx... ] 

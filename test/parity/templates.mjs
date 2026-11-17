@@ -5,11 +5,14 @@
 // Names are file names without ".docx". The data is built from the data names each template reads: a repeat gets two
 // items, a bare condition gets true, everything else a "v_<name>" string, and dates are shaped to the input pattern of the
 // dateFormat that reads them. Output files (data, both texts and a diff) go to --dir, default a temp directory.
+// A template that calls ref:<name> has the templates it names, found in the same directory, sent with it (and copied into
+// Docmosis's store under that name), and its sample data is the union of theirs. refLookup: names cannot be read from a
+// template, so those includes are not sent.
 // Environment variables are the same as compare.mjs.
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { generateData } from "./datagen.mjs";
+import { dataWithIncludes } from "./datagen.mjs";
 import { diffLines } from "./compare-lib.mjs";
 import { outcomeLines, renderOnDocmosis, renderOnRenderer } from "./lib.mjs";
 
@@ -29,11 +32,11 @@ mkdirSync(outDir, { recursive: true });
 let differing = 0;
 for (const name of names) {
   const file = join(templatesDir, `${name.replace(/\.docx$/, "")}.docx`);
-  const data = generateData(readFileSync(file));
+  const { data, includes } = dataWithIncludes(readFileSync(file), templatesDir);
   writeFileSync(join(outDir, `${name}.json`), JSON.stringify(data, null, 1));
   const [docmosis, renderer] = [
-    await renderOnDocmosis(file, data, { devMode: true, label: name }),
-    await renderOnRenderer(file, data, { devMode: true, label: name })
+    await renderOnDocmosis(file, data, { devMode: true, label: name, includes }),
+    await renderOnRenderer(file, data, { devMode: true, label: name, includes })
   ];
   const [a, b] = [outcomeLines(docmosis), outcomeLines(renderer)];
   writeFileSync(join(outDir, `${name}.docmosis.txt`), `${a.join("\n")}\n`);

@@ -26,7 +26,7 @@ Every `/rs/*` endpoint is also served under `/api/*`. Errors are `{"succeeded":f
 | `GET /health/readiness` | 200 `{"status":"UP"}`, or 503 `{"status":"DOWN"}` when LibreOffice is unavailable |
 | `GET /rs/status` | `{"ready":<LibreOffice available>,...}` |
 | `GET /rs/ping` | 200 |
-| `POST /rs/render` | JSON, form or multipart `{templateBase64 or templateFile, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx. `accessKey` is accepted and ignored |
+| `POST /rs/render` | JSON, form or multipart `{templateBase64 or templateFile, includes?, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx. `accessKey` is accepted and ignored |
 | `POST /rs/convert` | multipart `file`, `outputName`; returns a PDF |
 | `/api/getTemplateStructure`, `/api/getSampleData` | 501 |
 
@@ -61,6 +61,21 @@ curl -s localhost:8080/api/render -F templateFile=@T.docx -F 'data=@payload.json
 ```
 
 Render failures return HTTP 400 as Docmosis does, with the first problem in `shortMsg` and every problem in `longMsg`.
+
+### Send included templates with the request
+
+A template that calls `<<ref:Other.docx>>` or `<<refLookup:field>>` merges another template in at that point. Docmosis finds it in its store; this service has none, so the request carries every template it may name, under the name the tag uses:
+
+- JSON, or a form field: `includes` is an object of template name to base64 `.docx` (in a form field, the object as a JSON string).
+- Multipart: any number of file parts named `include`; each is named by its filename.
+- Both can be used in one request. At most 100 includes, each a zip. A name the tag asks for that was not sent fails as Docmosis's missing template does: `Template Not found [name]`, in devMode written into the document in place of the tag. Includes count against the same zip size limits as the template.
+
+```sh
+curl -s localhost:8080/api/render -F templateFile=@Letter.docx -F include=@Letter-Header.docx -F include=@Appeal-Heading.docx \
+  -F 'data=@payload.json;type=application/json' -F outputFormat=pdf -o out.pdf
+```
+
+`docs/template-language.md` says what an include keeps of the template it comes from, and what it cannot carry.
 
 ## Configuration
 
@@ -100,7 +115,8 @@ From inside another container use `http://host.docker.internal:8080`, or join th
 
 `TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance.
 
-The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header).
+The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header, and `styles.xml`, `numbering.xml`, `media/` and `rels.xml` (extra relationships) if it needs them).
+- A fixture whose template calls `ref:` or `refLookup:` keeps the templates it includes in `includes/<name>.docx/`, one directory per template laid out the same way. `build.mjs` writes them to `test/fixtures/<fixture>.includes/<name>.docx`, the functional suite and `compare.mjs` send them, and `capture.mjs` copies them into Docmosis's store under that name, so give an include a name no other fixture uses.
 - A merge fixture has an `expected.txt`, the merged text. The functional suite renders it as docx and PDF.
 - A fixture whose name starts with `_` is one Docmosis rejects. It has an `error-phrase.txt` (hand-written: the phrase a rejection message must contain), `expected-error.txt` (Docmosis's status and message) and `expected-devmode.txt` (the document with the errors written in place). The functional suite checks the status and the phrase, and that devMode writes `Docmosis<N>` markers.
 

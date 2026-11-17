@@ -7,17 +7,20 @@ export interface RenderRequest {
   outputFormat?: "pdf" | "docx";
   devMode?: boolean;
   data: unknown;
+  /** Templates a ref: or refLookup: may name, by name. */
+  includes?: Record<string, Buffer>;
 }
 
 export async function status(): Promise<Response> {
   return fetch(`${baseUrl}/rs/status`);
 }
 
-export async function render({ template, ...rest }: RenderRequest, path = "/api/render"): Promise<Response> {
+export async function render({ template, includes, ...rest }: RenderRequest, path = "/api/render"): Promise<Response> {
+  const encoded = includes ? Object.fromEntries(Object.entries(includes).map(([name, content]) => [name, content.toString("base64")])) : undefined;
   return fetch(`${baseUrl}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ outputName: `out.${rest.outputFormat ?? "pdf"}`, ...rest, templateBase64: template.toString("base64") })
+    body: JSON.stringify({ outputName: `out.${rest.outputFormat ?? "pdf"}`, ...rest, includes: encoded, templateBase64: template.toString("base64") })
   });
 }
 

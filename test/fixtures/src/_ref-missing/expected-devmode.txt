@@ -1,0 +1,3 @@
+Before
+<<ref:ref-missing-absent.docx>>Docmosis1
+After

@@ -1,3 +1,5 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { unzip } from "../support/zip.ts";
 
 const decode = (s) =>
@@ -212,4 +214,35 @@ export function generateData(docx) {
     fill(root.children, data, data, data, dateIn);
   }
   return data;
+}
+
+/** The templates named by ref: tags in a template and in the templates those name, read from the directory the template is in. */
+function includesOf(docx, dir, found = {}) {
+  const text = [...unzip(docx).values()].map((b) => b.toString("utf8")).join("");
+  const tags = decode(text.replace(/<[^>]+>/g, "")).matchAll(/<<ref:([^<>]+?)\s*>>/g);
+  for (const [, ref] of tags) {
+    const file = join(dir, ref);
+    if (!(ref in found) && existsSync(file)) {
+      found[ref] = readFileSync(file);
+      includesOf(found[ref], dir, found);
+    }
+  }
+  return found;
+}
+
+function merged(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] !== undefined && b[i] !== undefined ? merged(a[i], b[i]) : (a[i] ?? b[i])));
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    return { ...a, ...Object.fromEntries(Object.entries(b).map(([k, v]) => [k, k in a ? merged(a[k], v) : v])) };
+  }
+  return a ?? b;
+}
+
+/** Sample data for a template and the templates its ref: tags include, whose data is merged in. */
+export function dataWithIncludes(docx, dir) {
+  const includes = includesOf(docx, dir);
+  const data = Object.values(includes).reduce((all, template) => merged(all, generateData(template)), generateData(docx));
+  return { data, includes };
 }

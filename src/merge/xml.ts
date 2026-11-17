@@ -21,6 +21,8 @@ export interface XEl {
   cache?: unknown;
   /** Further paragraphs a value's line breaks split this one into, in order. */
   rest?: XEl[];
+  /** Set on the paragraph that follows an included template, where a `ref:` split its host paragraph. */
+  refBreak?: boolean;
 }
 
 export type XNode = XText | XEl;

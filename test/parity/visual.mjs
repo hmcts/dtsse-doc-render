@@ -11,7 +11,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { generateData } from "./datagen.mjs";
+import { dataWithIncludes } from "./datagen.mjs";
 import { renderOnDocmosis, renderOnRenderer } from "./lib.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -239,9 +239,9 @@ await pool(names, jobs, async (name) => {
     return;
   }
   try {
-    const data = generateData(readFileSync(file));
+    const { data, includes } = dataWithIncludes(readFileSync(file), templatesDir);
     writeFileSync(join(dir, "data.json"), JSON.stringify(data, null, 1));
-    const [a, b] = await Promise.all([renderOnDocmosis(file, data, { format: "pdf", devMode: true, label: name }), renderOnRenderer(file, data, { format: "pdf", devMode: true })]);
+    const [a, b] = await Promise.all([renderOnDocmosis(file, data, { format: "pdf", devMode: true, label: name, includes }), renderOnRenderer(file, data, { format: "pdf", devMode: true, includes })]);
     rec.docmosisOk = a.ok;
     rec.rendererOk = b.ok;
     if (a.ok) writeFileSync(join(dir, "a.pdf"), a.buffer);

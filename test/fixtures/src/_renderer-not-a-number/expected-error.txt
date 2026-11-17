@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<word{renderer=number('0')}>> Cannot render field "word":Renderer:number Can't parse value as a number: "hello".

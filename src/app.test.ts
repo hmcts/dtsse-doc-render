@@ -540,3 +540,88 @@ describe("body limit", () => {
     expect(response.status).toBe(200);
   });
 });
+
+describe("includes: templates a ref: or refLookup: may name, sent with the template", () => {
+  const OTHER = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from("OTHER")]);
+  const sentIncludes = (deps: Dependencies): Record<string, Buffer> => {
+    const options = vi.mocked(deps.merge).mock.calls[0]?.[2] as { includes?: Record<string, Buffer> } | undefined;
+    return options?.includes ?? {};
+  };
+  const names = (deps: Dependencies): string[] => Object.keys(sentIncludes(deps));
+  const included = (deps: Dependencies): Record<string, string> => Object.fromEntries(Object.entries(sentIncludes(deps)).map(([k, v]) => [k, v.toString()]));
+
+  it("passes none when the request has none", async () => {
+    const { base, deps } = await start();
+    await json(base, "/rs/render", { templateBase64: T });
+    expect(names(deps)).toEqual([]);
+  });
+
+  it("reads a JSON includes object of name to base64", async () => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", {
+      templateBase64: T,
+      includes: { "Header.docx": OTHER.toString("base64"), "Other.docx": ZIP.toString("base64") }
+    });
+    expect(response.status).toBe(200);
+    expect(included(deps)).toEqual({ "Header.docx": OTHER.toString(), "Other.docx": ZIP.toString() });
+  });
+
+  it("reads includes sent as a JSON string in a form field", async () => {
+    const { base, deps } = await start();
+    const response = await fetch(`${base}/rs/render`, {
+      method: "POST",
+      body: form({ templateBase64: T, includes: JSON.stringify({ "Header.docx": OTHER.toString("base64") }) })
+    });
+    expect(response.status).toBe(200);
+    expect(included(deps)).toEqual({ "Header.docx": OTHER.toString() });
+  });
+
+  it("reads each file part named include, by its filename, together with a JSON object", async () => {
+    const { base, deps } = await start();
+    const body = form({ templateBase64: T, includes: JSON.stringify({ "FromJson.docx": ZIP.toString("base64") }) });
+    body.append("include", new Blob([OTHER]), "One.docx");
+    body.append("include", new Blob([ZIP]), "Two.docx");
+    body.append("templateFile", new Blob([ZIP]), "main.docx");
+    const response = await fetch(`${base}/rs/render`, { method: "POST", body });
+    expect(response.status).toBe(200);
+    expect(Object.keys(included(deps)).sort()).toEqual(["FromJson.docx", "One.docx", "Two.docx"]);
+  });
+
+  it.each([
+    ["not an object", { includes: "[1]" }, "includes must be an object"],
+    ["an array", { includes: ["x"] }, "includes must be an object"],
+    ["not JSON", { includes: "{broken" }, "includes is not valid JSON"],
+    ["a name with no base64 string", { includes: { "A.docx": 5 } }, "A.docx: an include must be a base64 string"],
+    ["a name with bad base64", { includes: { "A.docx": "***" } }, "templateBase64 is not valid base64"],
+    ["a name that is not a zip", { includes: { "A.docx": Buffer.from("hello").toString("base64") } }, "A.docx is not a .docx"]
+  ])("returns 400 for includes that are %s", async (_what, extra, message) => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", { templateBase64: T, ...extra });
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await read(response))).toContain(message);
+    expect(deps.merge).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for an include file part with no filename", async () => {
+    const { base } = await start();
+    const body = form({ templateBase64: T });
+    body.append("include", new Blob([OTHER]), "");
+    const response = await fetch(`${base}/rs/render`, { method: "POST", body });
+    expect(response.status).toBe(400);
+    expect((await read(response)).longMsg).toContain("needs a filename");
+  });
+
+  it("returns 400 for more than 100 includes", async () => {
+    const { base } = await start();
+    const includes = Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`T${i}.docx`, ZIP.toString("base64")]));
+    const response = await json(base, "/rs/render", { templateBase64: T, includes });
+    expect(response.status).toBe(400);
+    expect((await read(response)).shortMsg).toBe("Too many includes");
+  });
+
+  it("does not let an include named like an Object property reach the prototype", async () => {
+    const { base, deps } = await start();
+    await json(base, "/rs/render", { templateBase64: T, includes: { __proto__: ZIP.toString("base64"), constructor: ZIP.toString("base64") } });
+    expect(Object.keys(included(deps))).toEqual(["constructor"]);
+  });
+});

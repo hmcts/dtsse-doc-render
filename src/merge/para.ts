@@ -4,7 +4,11 @@ import { cloneEl, encodeText, makeEl, makeText, textOf, type XEl } from "./xml.t
 /** A paragraph break inserted by a value. A `\n` in an inserted value ends the paragraph; the next one copies the paragraph properties. */
 export const SPLIT = "dr:split";
 /** Inserted-value characters: `\n` ends the paragraph, `\v` is a line break, `\f` ends the paragraph and the next one has default properties. */
-const SEPARATOR = /(\r\n|\n|\r|\v|\f)/;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: \u0001 is the marker REF_BREAK inserts, which XML cannot carry
+const SEPARATOR = /(\r\n|\n|\r|\v|\f|\u0001)/;
+
+/** Inserted where an included template goes. XML cannot carry it, so no data value can forge one. */
+export const REF_BREAK = "\u0001";
 
 /** Stands in for a non-text run child (tab, break, drawing, field character) in a paragraph's joined text. */
 export const NODE_CHAR = "\uFFFC";
@@ -110,6 +114,9 @@ function setText(el: XEl, text: string): void {
 function separatorEl(sep: string): XEl {
   if (sep === "\v") {
     return makeEl("w:br", "<w:br/>", [], true);
+  }
+  if (sep === REF_BREAK) {
+    return makeEl(SPLIT, "<dr:split ref/>", [], true);
   }
   return makeEl(SPLIT, sep === "\f" ? "<dr:split plain/>" : "<dr:split/>", [], true);
 }
@@ -339,6 +346,7 @@ export function splitAtBreaks(p: XEl): XEl[] {
     }
     out.push(cur);
     cur = right!;
+    cur.refBreak = mark.open.includes(" ref");
   }
 }
 

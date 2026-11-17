@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { bytes, type RenderRequest, render } from "./client.ts";
 
 const fixturesDir = new URL("../fixtures/", import.meta.url);
@@ -8,6 +8,14 @@ export interface Fixture {
   docx: Buffer;
   data: unknown;
   expected: string[];
+  /** The templates this one includes, by the name its ref: tags use. */
+  includes: Record<string, Buffer>;
+}
+
+/** The templates a fixture includes, built from test/fixtures/src/<name>/includes/. */
+export function fixtureIncludes(name: string): Record<string, Buffer> {
+  const dir = new URL(`${name}.includes/`, fixturesDir);
+  return existsSync(dir) ? Object.fromEntries(readdirSync(dir).map((file) => [file, readFileSync(new URL(file, dir))])) : {};
 }
 
 export function fixtureDocx(name: string): Buffer {
@@ -21,6 +29,7 @@ export function loadFixtures(): Fixture[] {
     .map((name) => ({
       name,
       docx: fixtureDocx(name),
+      includes: fixtureIncludes(name),
       data: JSON.parse(readFileSync(new URL(`src/${name}/data.json`, fixturesDir), "utf8")),
       expected: readFileSync(new URL(`src/${name}/expected.txt`, fixturesDir), "utf8")
         .split("\n")
@@ -31,6 +40,7 @@ export function loadFixtures(): Fixture[] {
 export interface ErrorFixture {
   name: string;
   docx: Buffer;
+  includes: Record<string, Buffer>;
   data: unknown;
   /** The phrase a rejection's message must contain, matched case-insensitively. Docmosis's own message contains it. */
   phrase: string;
@@ -45,6 +55,7 @@ export function loadErrorFixtures(): ErrorFixture[] {
     .map((name) => ({
       name,
       docx: fixtureDocx(name),
+      includes: fixtureIncludes(name),
       data: JSON.parse(readFileSync(new URL(`src/${name}/data.json`, fixturesDir), "utf8")),
       phrase: readFileSync(new URL(`src/${name}/error-phrase.txt`, fixturesDir), "utf8").trim(),
       devModeExpected: readFileSync(new URL(`src/${name}/expected-devmode.txt`, fixturesDir), "utf8")

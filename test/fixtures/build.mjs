@@ -1,6 +1,6 @@
 // Zips each test/fixtures/src/<name>/ directory into test/fixtures/<name>.docx. The built files are committed, so
 // running this is only needed after editing a fixture. Usage: node test/fixtures/build.mjs
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { crc32, deflateRawSync } from "node:zlib";
@@ -64,30 +64,63 @@ const REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
 const OFFICE_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML_DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
 
-function build(name) {
-  const dir = join(srcDir, name);
-  const headers = existsSync(join(dir, "header1.xml")) ? ["header1.xml"] : [];
+const MEDIA_TYPES = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif" };
+const WML = "application/vnd.openxmlformats-officedocument.wordprocessingml";
+
+/**
+ * Zips one document from a directory: document.xml, and optionally header1.xml, styles.xml, numbering.xml, media/<files>
+ * and rels.xml, whose Relationship elements are added to the document relationships as written.
+ */
+function buildDocx(dir) {
+  const has = (file) => existsSync(join(dir, file));
+  const headers = has("header1.xml") ? ["header1.xml"] : [];
+  const media = has("media") ? readdirSync(join(dir, "media")).sort() : [];
+  const extensions = [...new Set(media.map((m) => m.split(".").pop().toLowerCase()))];
 
   const contentTypes =
     `${XML_DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">` +
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' +
     '<Default Extension="xml" ContentType="application/xml"/>' +
-    '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>' +
-    headers.map((h) => `<Override PartName="/word/${h}" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.header+xml"/>`).join("") +
+    extensions.map((e) => `<Default Extension="${e}" ContentType="${MEDIA_TYPES[e]}"/>`).join("") +
+    `<Override PartName="/word/document.xml" ContentType="${WML}.document.main+xml"/>` +
+    (has("styles.xml") ? `<Override PartName="/word/styles.xml" ContentType="${WML}.styles+xml"/>` : "") +
+    (has("numbering.xml") ? `<Override PartName="/word/numbering.xml" ContentType="${WML}.numbering+xml"/>` : "") +
+    headers.map((h) => `<Override PartName="/word/${h}" ContentType="${WML}.header+xml"/>`).join("") +
     "</Types>";
   const rootRels = `${XML_DECL}<Relationships xmlns="${REL_NS}"><Relationship Id="rId1" Type="${OFFICE_REL}/officeDocument" Target="word/document.xml"/></Relationships>`;
   const docRels = `${XML_DECL}<Relationships xmlns="${REL_NS}">${headers
     .map((h, i) => `<Relationship Id="rId${i + 2}" Type="${OFFICE_REL}/header" Target="${h}"/>`)
-    .join("")}</Relationships>`;
+    .join("")}${has("styles.xml") ? `<Relationship Id="rIdStyles" Type="${OFFICE_REL}/styles" Target="styles.xml"/>` : ""}${
+    has("numbering.xml") ? `<Relationship Id="rIdNumbering" Type="${OFFICE_REL}/numbering" Target="numbering.xml"/>` : ""
+  }${has("rels.xml") ? readFileSync(join(dir, "rels.xml"), "utf8").trim() : ""}</Relationships>`;
 
-  const entries = [
+  return zip([
     { name: "[Content_Types].xml", data: Buffer.from(contentTypes) },
     { name: "_rels/.rels", data: Buffer.from(rootRels) },
     { name: "word/_rels/document.xml.rels", data: Buffer.from(docRels) },
     { name: "word/document.xml", data: readFileSync(join(dir, "document.xml")) },
-    ...headers.map((h) => ({ name: `word/${h}`, data: readFileSync(join(dir, h)) }))
-  ];
-  writeFileSync(join(here, `${name}.docx`), zip(entries));
+    ...(has("styles.xml") ? [{ name: "word/styles.xml", data: readFileSync(join(dir, "styles.xml")) }] : []),
+    ...(has("numbering.xml") ? [{ name: "word/numbering.xml", data: readFileSync(join(dir, "numbering.xml")) }] : []),
+    ...headers.map((h) => ({ name: `word/${h}`, data: readFileSync(join(dir, h)) })),
+    ...media.map((m) => ({ name: `word/media/${m}`, data: readFileSync(join(dir, "media", m)) }))
+  ]);
+}
+
+/**
+ * A fixture holds the template in its own directory and, optionally, the templates it includes in includes/<name>/, one
+ * directory per template laid out the same way. They are built into test/fixtures/<fixture>.includes/<name>.
+ */
+function build(name) {
+  const dir = join(srcDir, name);
+  writeFileSync(join(here, `${name}.docx`), buildDocx(dir));
+  const includes = join(dir, "includes");
+  if (existsSync(includes)) {
+    const out = join(here, `${name}.includes`);
+    mkdirSync(out, { recursive: true });
+    for (const entry of readdirSync(includes, { withFileTypes: true }).filter((d) => d.isDirectory())) {
+      writeFileSync(join(out, entry.name), buildDocx(join(includes, entry.name)));
+    }
+  }
 }
 
 const names = readdirSync(srcDir, { withFileTypes: true })
