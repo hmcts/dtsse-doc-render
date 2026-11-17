@@ -1,5 +1,4 @@
-import * as exprModule from "./expr.ts";
-import { ExpressionError, evaluate, formatValue, type Instruction, type Scope, truthy } from "./expr.ts";
+import { ExpressionError, evaluate, formatValue, type Instruction, repeatItems, type Scope, truthy } from "./expr.ts";
 import { type Found, hasContent, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, type XEl, type XNode } from "./xml.ts";
 
@@ -147,21 +146,6 @@ function buildTree<N>(seq: Seq<N>[]): TItem<N>[] {
     }
   }
   return root;
-}
-
-/** A list repeats its items, a map repeats once, and anything else repeats nothing. */
-const fallbackRepeatItems = (value: unknown): unknown[] => (Array.isArray(value) ? value : value !== null && typeof value === "object" ? [value] : []);
-
-function repeatItems(value: unknown): unknown[] {
-  try {
-    const shared = (exprModule as { repeatItems?: (value: unknown) => unknown[] }).repeatItems;
-    if (shared) {
-      return shared(value);
-    }
-  } catch {
-    // expr.ts does not export it (yet); the local rule below is the same one
-  }
-  return fallbackRepeatItems(value);
 }
 
 interface Plan<N> {
