@@ -12,8 +12,8 @@
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { dataWithIncludes } from "./datagen.mjs";
 import { diffLines } from "./compare-lib.mjs";
+import { dataWithIncludes } from "./datagen.mjs";
 import { outcomeLines, renderOnDocmosis, renderOnRenderer } from "./lib.mjs";
 
 const argv = process.argv.slice(2);

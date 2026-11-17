@@ -38,9 +38,22 @@ describe("fields", () => {
     expect(paragraphs(out)).toEqual(["x one", "two y"]);
   });
 
-  it("reads dotted paths and ignores heading noise", async () => {
-    expect(await texts(para("<<## 1.1 Heading ##>> <<a.b>>"), { a: { b: "deep" } })).toEqual(["<<## 1.1 Heading ##>> deep"]);
+  it("reads dotted paths, and an unterminated heading marker is left as text", async () => {
+    expect(await texts(para("<<a.b>>"), { a: { b: "deep" } })).toEqual(["deep"]);
     expect(await texts(para("<<## unterminated <<a.b>>"), { a: { b: "x" } })).toEqual(["<<## unterminated x"]);
+  });
+
+  it("removes the whole paragraph that holds a <<## … ##>> comment, whatever surrounds it, as Docmosis does", async () => {
+    const body =
+      para("before") +
+      para("<<## 14.1 Heading ##>>") +
+      para("lead <<## 14.2 ##>> trail") +
+      para("<<a.b>> <<## c ##>>") +
+      para("<<## one ##>><<## two ##>>") +
+      para("after");
+    expect(await texts(body, { a: { b: "x" } })).toEqual(["before", "after"]);
+    const cells = table(row(cell(para("<<## cell ##>>")), cell(para("other"))));
+    expect(await texts(cells, {})).toEqual(["", "other", ""]);
   });
 
   it("removes the whole paragraph that holds a comment, as Docmosis does", async () => {

@@ -8,7 +8,7 @@
 // throwaway container built from test/parity/visual/Dockerfile, and <out>/summary.json and <out>/report.html are written.
 // --reuse keeps PDFs already in <out>/work and only re-analyses them. Environment variables are the same as compare.mjs; VISUAL_FUZZ sets the anti-alias tolerance (default 12%).
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dataWithIncludes } from "./datagen.mjs";
@@ -56,7 +56,9 @@ export function stratifiedSample(all, size, required, seedValue) {
   const rand = rng(seedValue);
   const chosen = new Set(required.filter((n) => all.includes(n)));
   const counts = {};
-  for (const n of all) counts[n.split("-")[0]] = (counts[n.split("-")[0]] ?? 0) + 1;
+  for (const n of all) {
+    counts[n.split("-")[0]] = (counts[n.split("-")[0]] ?? 0) + 1;
+  }
   const groups = new Map();
   for (const n of all) {
     const p = n.split("-")[0];
@@ -79,7 +81,9 @@ export function stratifiedSample(all, size, required, seedValue) {
 }
 
 const median = (xs) => {
-  if (!xs.length) return null;
+  if (!xs.length) {
+    return null;
+  }
   const s = [...xs].sort((a, b) => a - b);
   const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
@@ -93,8 +97,19 @@ function parseLines(html) {
     lines.height = height;
     for (const [, attrs, inner] of body.matchAll(/<line ([^>]*)>([\s\S]*?)<\/line>/g)) {
       const num = (k) => Number(new RegExp(`${k}="([\\d.]+)"`).exec(attrs)[1]);
-      const text = [...inner.matchAll(/<word[^>]*>([^<]*)<\/word>/g)].map((m) => m[1]).join(" ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
-      if (text) lines.push({ text, x: num("xMin"), y: num("yMin"), band: num("yMin") < 70 || num("yMin") > height - 70 });
+      const text = [...inner.matchAll(/<word[^>]*>([^<]*)<\/word>/g)]
+        .map((m) => m[1])
+        .join(" ")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;|&apos;/g, "'")
+        .replace(/&amp;/g, "&")
+        .replace(/\s+/g, " ")
+        .trim();
+      if (text) {
+        lines.push({ text, x: num("xMin"), y: num("yMin"), band: num("yMin") < 70 || num("yMin") > height - 70 });
+      }
     }
     pages.push(lines);
   }
@@ -105,7 +120,11 @@ function parseLines(html) {
 export function shift(pagesA, pagesB) {
   const index = (pages) => {
     const m = new Map();
-    pages.forEach((lines, page) => lines.forEach((l) => m.set(l.text, [...(m.get(l.text) ?? []), { ...l, page }])));
+    for (const [page, lines] of pages.entries()) {
+      for (const l of lines) {
+        m.set(l.text, [...(m.get(l.text) ?? []), { ...l, page }]);
+      }
+    }
     return m;
   };
   const [ia, ib] = [index(pagesA), index(pagesB)];
@@ -129,13 +148,16 @@ export function shift(pagesA, pagesB) {
     });
   }
   const totalB = [...ib.values()].reduce((n, v) => n + v.length, 0);
-  const unmatched = (from, other) =>
-    [...from].flatMap(([text, ls]) => ls.slice((other.get(text) ?? []).length));
+  const unmatched = (from, other) => [...from].flatMap(([text, ls]) => ls.slice((other.get(text) ?? []).length));
   const missingFromB = unmatched(ia, ib);
   const extraInB = unmatched(ib, ia);
   const bag = (pages) => {
     const m = new Map();
-    for (const l of pages.flat().filter((x) => !x.band)) for (const w of l.text.replace(/-$/, "").split(" ")) m.set(w, (m.get(w) ?? 0) + 1);
+    for (const l of pages.flat().filter((x) => !x.band)) {
+      for (const w of l.text.replace(/-$/, "").split(" ")) {
+        m.set(w, (m.get(w) ?? 0) + 1);
+      }
+    }
     return m;
   };
   const wordsOnly = (x, y) => [...x].reduce((n, [w, c]) => n + Math.max(0, c - (y.get(w) ?? 0)), 0);
@@ -194,15 +216,33 @@ function causes(r) {
   const out = [];
   const inBand = sh.onlyDocmosisInHeaderFooter + sh.onlyRendererInHeaderFooter;
   const wordDiff = sh.wordsOnlyDocmosis + sh.wordsOnlyRenderer;
-  if (sh.rawTagLinesRenderer > sh.rawTagLinesDocmosis) out.push("merge");
-  if (inBand > 0) out.push("header-footer");
-  if (r.imagesDocmosis !== r.imagesRenderer) out.push("images");
-  if (r.fontsDiffer) out.push("fonts");
-  if (!r.fontsDiffer && (sh.maxDx ?? 0) > 3) out.push("horizontal");
-  if (wordDiff > Math.max(6, 0.03 * sh.words)) out.push("text-reflow");
-  if (Math.abs(sh.hyphenatedLinesDocmosis - sh.hyphenatedLinesRenderer) >= 2) out.push("hyphenation");
-  if (!r.samePageCount) out.push("page-count");
-  if (!out.length && ((sh.medianDy ?? 0) > 1 || (r.meanMismatchPct ?? 0) > 1.5)) out.push("layout-engine");
+  if (sh.rawTagLinesRenderer > sh.rawTagLinesDocmosis) {
+    out.push("merge");
+  }
+  if (inBand > 0) {
+    out.push("header-footer");
+  }
+  if (r.imagesDocmosis !== r.imagesRenderer) {
+    out.push("images");
+  }
+  if (r.fontsDiffer) {
+    out.push("fonts");
+  }
+  if (!r.fontsDiffer && (sh.maxDx ?? 0) > 3) {
+    out.push("horizontal");
+  }
+  if (wordDiff > Math.max(6, 0.03 * sh.words)) {
+    out.push("text-reflow");
+  }
+  if (Math.abs(sh.hyphenatedLinesDocmosis - sh.hyphenatedLinesRenderer) >= 2) {
+    out.push("hyphenation");
+  }
+  if (!r.samePageCount) {
+    out.push("page-count");
+  }
+  if (!out.length && ((sh.medianDy ?? 0) > 1 || (r.meanMismatchPct ?? 0) > 1.5)) {
+    out.push("layout-engine");
+  }
   return out;
 }
 
@@ -210,7 +250,9 @@ async function pool(items, n, fn) {
   const queue = [...items];
   await Promise.all(
     Array.from({ length: n }, async () => {
-      while (queue.length) await fn(queue.shift());
+      while (queue.length) {
+        await fn(queue.shift());
+      }
     })
   );
 }
@@ -219,11 +261,19 @@ const all = readdirSync(templatesDir)
   .filter((f) => f.endsWith(".docx"))
   .map(stripExt)
   .sort();
-const required = includeFile && existsSync(includeFile) ? readFileSync(includeFile, "utf8").split("\n").map((l) => stripExt(l.trim())).filter(Boolean) : [];
+const required =
+  includeFile && existsSync(includeFile)
+    ? readFileSync(includeFile, "utf8")
+        .split("\n")
+        .map((l) => stripExt(l.trim()))
+        .filter(Boolean)
+    : [];
 const names = explicit.length ? explicit.map(stripExt) : stratifiedSample(all, sampleSize, required, seed);
 
 const work = join(outDir, "work");
-if (!reuse) rmSync(work, { recursive: true, force: true });
+if (!reuse) {
+  rmSync(work, { recursive: true, force: true });
+}
 mkdirSync(work, { recursive: true });
 console.log(`measuring ${names.length} templates into ${outDir}`);
 
@@ -241,12 +291,21 @@ await pool(names, jobs, async (name) => {
   try {
     const { data, includes } = dataWithIncludes(readFileSync(file), templatesDir);
     writeFileSync(join(dir, "data.json"), JSON.stringify(data, null, 1));
-    const [a, b] = await Promise.all([renderOnDocmosis(file, data, { format: "pdf", devMode: true, label: name, includes }), renderOnRenderer(file, data, { format: "pdf", devMode: true, includes })]);
+    const [a, b] = await Promise.all([
+      renderOnDocmosis(file, data, { format: "pdf", devMode: true, label: name, includes }),
+      renderOnRenderer(file, data, { format: "pdf", devMode: true, includes })
+    ]);
     rec.docmosisOk = a.ok;
     rec.rendererOk = b.ok;
-    if (a.ok) writeFileSync(join(dir, "a.pdf"), a.buffer);
-    if (b.ok) writeFileSync(join(dir, "b.pdf"), b.buffer);
-    if (!a.ok || !b.ok) rec.error = { docmosis: a.error?.shortMsg, renderer: b.error?.shortMsg ?? b.error?.longMsg };
+    if (a.ok) {
+      writeFileSync(join(dir, "a.pdf"), a.buffer);
+    }
+    if (b.ok) {
+      writeFileSync(join(dir, "b.pdf"), b.buffer);
+    }
+    if (!a.ok || !b.ok) {
+      rec.error = { docmosis: a.error?.shortMsg, renderer: b.error?.shortMsg ?? b.error?.longMsg };
+    }
   } catch (e) {
     rec.error = { generator: String(e.message ?? e) };
   }
@@ -255,7 +314,9 @@ await pool(names, jobs, async (name) => {
 
 const measurable = [...results.values()].filter((r) => r.docmosisOk && r.rendererOk);
 for (const r of results.values()) {
-  if (!(r.docmosisOk && r.rendererOk) && !reuse) rmSync(join(work, r.name), { recursive: true, force: true });
+  if (!(r.docmosisOk && r.rendererOk) && !reuse) {
+    rmSync(join(work, r.name), { recursive: true, force: true });
+  }
 }
 
 if (measurable.length) {
@@ -295,7 +356,12 @@ for (const r of measurable) {
     .map((l) => {
       const [n, ae, area, inkA, inkB, size] = l.split("\t");
       const ink = Math.max(Number(inkA), Number(inkB), 1);
-      return { page: Number(n), mismatchPct: Math.round((Number(ae) / Number(area)) * 1e4) / 100, mismatchOfInkPct: Math.round(Math.min(100, (Number(ae) / ink) * 100) * 10) / 10, size };
+      return {
+        page: Number(n),
+        mismatchPct: Math.round((Number(ae) / Number(area)) * 1e4) / 100,
+        mismatchOfInkPct: Math.round(Math.min(100, (Number(ae) / ink) * 100) * 10) / 10,
+        size
+      };
     });
   const pcts = r.pages.map((p) => p.mismatchPct);
   r.meanMismatchPct = pcts.length ? Math.round((pcts.reduce((s, x) => s + x, 0) / pcts.length) * 100) / 100 : null;
@@ -310,10 +376,12 @@ const pct = (xs, p) => {
 const dist = (xs) => Object.fromEntries([50, 75, 90, 95, 100].map((p) => [`p${p}`, pct(xs, p)]));
 const summary = {
   measured: measurable.length,
-  failed: [...results.values()].filter((r) => !(r.docmosisOk && r.rendererOk)).map((r) => ({ name: r.name, error: r.error, docmosisOk: r.docmosisOk, rendererOk: r.rendererOk })),
+  failed: [...results.values()]
+    .filter((r) => !(r.docmosisOk && r.rendererOk))
+    .map((r) => ({ name: r.name, error: r.error, docmosisOk: r.docmosisOk, rendererOk: r.rendererOk })),
   equalPageCount: measurable.filter((r) => r.samePageCount).length,
   fontSetsDiffer: measurable.filter((r) => r.fontsDiffer).length,
-  causeCounts: measurable.reduce((c, r) => (r.causes.forEach((k) => (c[k] = (c[k] ?? 0) + 1)), c), {}),
+  causeCounts: measurable.flatMap((r) => r.causes).reduce((c, k) => Object.assign(c, { [k]: (c[k] ?? 0) + 1 }), {}),
   meanMismatchPct: dist(measurable.map((r) => r.meanMismatchPct)),
   worstPageMismatchPct: dist(measurable.map((r) => r.worstMismatchPct)),
   medianLineOffsetPt: { dx: dist(measurable.map((r) => r.shift.medianDx)), dy: dist(measurable.map((r) => r.shift.medianDy)) },
@@ -322,17 +390,24 @@ const summary = {
 };
 writeFileSync(join(outDir, "summary.json"), JSON.stringify(summary, null, 1));
 
-const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;");
+const esc = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;");
 const shown = summary.templates.slice(0, 25);
 const cards = shown
   .map((r) => {
-    const imgs = (n) => `<div class="row"><figure><figcaption>Docmosis</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/a-${n}.png"></figure><figure><figcaption>dtsse-doc-render</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/b-${n}.png"></figure><figure><figcaption>Diff (red differs)</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/d-${n}.png"></figure></div>`;
+    const imgs = (n) =>
+      `<div class="row"><figure><figcaption>Docmosis</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/a-${n}.png"></figure><figure><figcaption>dtsse-doc-render</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/b-${n}.png"></figure><figure><figcaption>Diff (red differs)</figcaption><img loading="lazy" src="work/${encodeURI(r.name)}/d-${n}.png"></figure></div>`;
     const worst = [...r.pages].sort((x, y) => y.mismatchPct - x.mismatchPct).slice(0, 2);
     return `<section><h2>${esc(r.name)}</h2><p>pages ${r.pagesDocmosis} vs ${r.pagesRenderer}; mean mismatch ${r.meanMismatchPct}%; median offset dx ${r.shift.medianDx}pt dy ${r.shift.medianDy}pt; max dx ${r.shift.maxDx}pt dy ${r.shift.maxDy}pt; fonts Docmosis [${esc(r.fontsDocmosis.join(", "))}] vs [${esc(r.fontsRenderer.join(", "))}]</p>${worst.map((p) => `<h3>page ${p.page}: ${p.mismatchPct}% differ</h3>${imgs(p.page.toString().padStart(Math.max(1, String(r.pagesDocmosis).length), "0"))}`).join("")}</section>`;
   })
   .join("\n");
 const rows = summary.templates
-  .map((r) => `<tr><td>${esc(r.name)}</td><td>${r.pagesDocmosis}/${r.pagesRenderer}</td><td>${r.meanMismatchPct}</td><td>${r.worstMismatchPct}</td><td>${r.shift.medianDx}</td><td>${r.shift.medianDy}</td><td>${r.shift.maxDx}</td><td>${r.shift.maxDy}</td><td>${r.fontsDiffer ? "differ" : "same"}</td><td>${r.causes.join(", ")}</td></tr>`)
+  .map(
+    (r) =>
+      `<tr><td>${esc(r.name)}</td><td>${r.pagesDocmosis}/${r.pagesRenderer}</td><td>${r.meanMismatchPct}</td><td>${r.worstMismatchPct}</td><td>${r.shift.medianDx}</td><td>${r.shift.medianDy}</td><td>${r.shift.maxDx}</td><td>${r.shift.maxDy}</td><td>${r.fontsDiffer ? "differ" : "same"}</td><td>${r.causes.join(", ")}</td></tr>`
+  )
   .join("");
 writeFileSync(
   join(outDir, "report.html"),

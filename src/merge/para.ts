@@ -73,7 +73,7 @@ function collect(el: XEl, segs: Seg[], parts: string[], pos: { n: number }): voi
   }
 }
 
-/** Finds `<<…>>` in a paragraph's joined text. `<<## … ##>>` heading noise is skipped. */
+/** Finds `<<…>>` in a paragraph's joined text. `<<## … ##>>` is a comment, like a slash-star comment. */
 export function findInstructions(text: string): { found: Found[]; problems: string[] } {
   const found: Found[] = [];
   const problems: string[] = [];
@@ -81,6 +81,9 @@ export function findInstructions(text: string): { found: Found[]; problems: stri
   while (i >= 0) {
     if (text.startsWith("<<##", i)) {
       const j = text.indexOf("##>>", i + 4);
+      if (j >= 0) {
+        found.push({ start: i, end: j + 4, body: text.slice(i + 2, j + 2), ins: { kind: "comment" } });
+      }
       i = text.indexOf("<<", j >= 0 ? j + 4 : i + 2);
       continue;
     }

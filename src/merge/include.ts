@@ -209,6 +209,16 @@ export class IncludeHost {
     return Object.hasOwn(this.includes, name);
   }
 
+  /** A file as it stands now, with any change this host has made. */
+  read(path: string): string | undefined {
+    for (const [part, rels] of this.partRels) {
+      if (this.relsPath(part) === path) {
+        return rels.xml;
+      }
+    }
+    return this.text(path);
+  }
+
   private text(path: string): string | undefined {
     const bytes = this.changed.get(path) ?? this.main[path];
     return bytes ? strFromU8(bytes) : undefined;

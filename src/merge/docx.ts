@@ -1,6 +1,7 @@
 import { strFromU8, strToU8, type Zippable, zipSync } from "fflate";
 import { LimitError } from "./errors.ts";
 import { Scope } from "./expr.ts";
+import { ImageMerger } from "./images.ts";
 import { IncludeHost } from "./include.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
 import { renderPart } from "./render.ts";
@@ -29,6 +30,7 @@ export function renderDocx(template: Buffer, data: unknown, options: RenderOptio
   const tally: ArchiveTally = { entries: 0, total: 0 };
   const entries = unzipWithin(template, limits, tally);
   const host = new IncludeHost(entries, options.includes ?? {}, limits, tally);
+  const images = new ImageMerger(entries, (path) => host.read(path));
   const names = Object.keys(entries);
   if (!names.includes("word/document.xml")) {
     throw new DocxFormatError("no word/document.xml, so this is not a .docx");
@@ -41,7 +43,7 @@ export function renderDocx(template: Buffer, data: unknown, options: RenderOptio
   const budget = { limits, nodes: 0, bytes: 0 };
   try {
     for (const name of parts) {
-      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget, host)));
+      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget, host, images)));
     }
   } catch (e) {
     if (e instanceof LimitError) {
@@ -50,10 +52,11 @@ export function renderDocx(template: Buffer, data: unknown, options: RenderOptio
     throw new DocxFormatError(`${e instanceof Error ? e.message : String(e)}`);
   }
   for (const [name, bytes] of host.finish()) {
-    rendered.set(name, bytes);
+    entries[name] = bytes;
   }
+  images.finish();
   const mtime = options.now ?? new Date();
-  const all = [...new Set([...names, ...rendered.keys()])];
+  const all = Object.keys(entries);
   const ordered = [...all.filter((n) => n === "[Content_Types].xml"), ...all.filter((n) => n !== "[Content_Types].xml")];
   const files: Zippable = {};
   for (const name of ordered) {

@@ -29,7 +29,11 @@ const declared = new Map();
 const broken = [];
 const perTemplate = [];
 let scanned = 0;
-const bump = (map, set) => set.forEach((f) => map.set(f, (map.get(f) ?? 0) + 1));
+const bump = (map, set) => {
+  for (const f of set) {
+    map.set(f, (map.get(f) ?? 0) + 1);
+  }
+};
 
 for (const file of readdirSync(dir).filter((f) => f.endsWith(".docx"))) {
   let parts;
@@ -47,11 +51,15 @@ for (const file of readdirSync(dir).filter((f) => f.endsWith(".docx"))) {
   for (const part of [...parts.keys()].filter((n) => /^word\/(styles|document|header\d*|footer\d*)\.xml$/.test(n))) {
     for (const [, attrs] of text(part).matchAll(/<w:rFonts\s([^>]*)\/?>/g)) {
       for (const [, key, value] of attrs.matchAll(/w:(ascii|hAnsi|cs|eastAsia)="([^"]*)"/g)) {
-        if (key !== "eastAsia" && value) usedHere.add(value);
+        if (key !== "eastAsia" && value) {
+          usedHere.add(value);
+        }
       }
       for (const [, , value] of attrs.matchAll(/w:(ascii|hAnsi)Theme="(major|minor)\w*"/g)) {
         const resolved = themeFont(value);
-        if (resolved) usedHere.add(resolved);
+        if (resolved) {
+          usedHere.add(resolved);
+        }
       }
     }
   }
@@ -106,8 +114,14 @@ const result = {
   templatesAskingForAFontTheRendererCannotMatchByMetrics: needsSubstitute,
   fonts: table
 };
-if (outFile) writeFileSync(outFile, JSON.stringify({ ...result, allUsed: Object.fromEntries(used), allDeclared: Object.fromEntries(declared) }, null, 1));
-console.log(`${needsSubstitute} of ${scanned} templates ask for at least one family that dtsse-doc-render has neither installed nor a metric-compatible stand-in for.`);
+if (outFile) {
+  writeFileSync(outFile, JSON.stringify({ ...result, allUsed: Object.fromEntries(used), allDeclared: Object.fromEntries(declared) }, null, 1));
+}
+console.log(
+  `${needsSubstitute} of ${scanned} templates ask for at least one family that dtsse-doc-render has neither installed nor a metric-compatible stand-in for.`
+);
 console.log(`${scanned} templates scanned, ${broken.length} unreadable. ${result.libreoffice.docmosis} vs ${result.libreoffice.renderer}\n`);
 console.log("| family | used by | declared in | Docmosis | dtsse-doc-render | same file |\n|---|---|---|---|---|---|");
-for (const r of table) console.log(`| ${r.family} | ${r.templatesUsing} | ${r.templatesDeclaring} | ${r.docmosis} | ${r.renderer} | ${r.sameFile ? "yes" : "no"} |`);
+for (const r of table) {
+  console.log(`| ${r.family} | ${r.templatesUsing} | ${r.templatesDeclaring} | ${r.docmosis} | ${r.renderer} | ${r.sameFile ? "yes" : "no"} |`);
+}
