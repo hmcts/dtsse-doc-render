@@ -13,8 +13,8 @@ const MIME: Record<string, string> = {
   html: "text/html"
 };
 
-const CONVERTED_FORMATS = ["doc", "odt", "html"];
-const KNOWN_EXTENSIONS = ["pdf", "docx", "txt", ...CONVERTED_FORMATS];
+const CONVERTED_FORMATS = ["doc", "odt", "html", "txt"];
+const KNOWN_EXTENSIONS = ["pdf", "docx", ...CONVERTED_FORMATS];
 
 export interface Dependencies {
   merge: (template: Buffer, data: unknown, options: MergeOptions) => Promise<Buffer>;
@@ -153,7 +153,7 @@ const outputOf = (params: Record<string, unknown>): { format: string; name: stri
     return { format: extension, name: requested };
   }
   if (!["pdf", "docx", ...CONVERTED_FORMATS].includes(explicit)) {
-    throw new HttpError(400, "Unsupported outputFormat", `outputFormat must be one of pdf, docx, doc, odt or html, not ${params.outputFormat}`);
+    throw new HttpError(400, "Unsupported outputFormat", `outputFormat must be one of pdf, docx, doc, odt, html or txt, not ${params.outputFormat}`);
   }
   return { format: explicit, name: extensionOf(requested) === explicit ? requested : `${requested}.${explicit}` };
 };
