@@ -6,3 +6,4 @@ No. | Item
 1. Acme Ltd
 2. Mr Bob Jones
 Rows in table: 3, names counted: 2.
+Reference: [from data] literal: [word] number: [5]

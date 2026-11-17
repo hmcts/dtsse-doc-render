@@ -1,0 +1,7 @@
+{
+  "address": {
+    "line1": "1 High Street",
+    "town": "Leeds"
+  },
+  "tags": ["a", "b"]
+}

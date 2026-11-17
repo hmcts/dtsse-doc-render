@@ -1,6 +1,7 @@
 {
   "claim": {
     "type": "damages",
+    "isDamages": true,
     "amount": 1500,
     "interestClaimed": true,
     "hasSolicitor": false,

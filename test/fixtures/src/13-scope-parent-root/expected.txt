@@ -1,0 +1,10 @@
+Top title: Top
+Item 1: first / own title [First title] / parent [Top] / root [Top] / org [Org Ltd]
+Parent matches.
+No fallback to the outer title.
+x of (parent n [first]) root [Top]
+y of (parent n [first]) root [Top]
+Item 2: second / own title [] / parent [Top] / root [Top] / org [Org Ltd]
+Parent matches.
+No fallback to the outer title.
+z of (parent n [second]) root [Top]

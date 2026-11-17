@@ -13,3 +13,4 @@ Case-insensitive: matches
 Items: 3 and 3
 More than two items.
 Sum: 4 and Case K1AB2345
+Amount: 1,234.50

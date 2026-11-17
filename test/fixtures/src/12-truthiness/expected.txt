@@ -1,0 +1,20 @@
+boolTrue: true
+strTrue: true
+strYes: false
+numOne: false
+numZero: false
+strFalse: false
+empty: false
+nothing: false
+missing: false
+map: false
+list: false
+emptyList: false
+strYes as expression: false
+numOne as expression: false
+strTrue as expression: true
+map as expression: false
+not strYes: true
+strYes = true: false
+boolTrue = ‘true’: true
+numOne = 1: true
