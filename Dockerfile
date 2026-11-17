@@ -39,6 +39,7 @@ RUN apk add --no-cache \
       libreoffice-writer \
       libreoffice-calc \
       libreoffice-impress \
+      tini \
       fontconfig \
       font-liberation \
       font-carlito \
@@ -79,5 +80,9 @@ COPY --from=production-dependencies --chown=hmcts:hmcts /app/node_modules ./node
 COPY --from=build --chown=hmcts:hmcts /app/dist ./dist
 
 EXPOSE 8080
+
+# A conversion that hits its timeout is killed as a process group, which leaves soffice.bin as a zombie that
+# only PID 1 can reap. Node does not reap strangers, so tini runs as PID 1.
+ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]
 
 CMD ["node", "dist/server.js"]
