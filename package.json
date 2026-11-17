@@ -28,7 +28,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.8",
     "@types/busboy": "^1.5.5",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "@vitest/coverage-v8": "5.1.0",
     "typescript": "7.0.2",
     "vite": "8.3.8",
@@ -40,7 +40,7 @@
     "fflate": "^0.8.3"
   },
   "resolutions": {
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "@opentelemetry/instrumentation-http": "0.222.0"
   }
 }
