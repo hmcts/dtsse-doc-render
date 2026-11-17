@@ -32,9 +32,10 @@ export function renderDocx(template: Buffer, data: unknown, options: { devMode: 
   const messages: string[] = [];
   const parts = names.filter((n) => CONTENT_PART.test(n)).sort((a, b) => Number(b === "word/document.xml") - Number(a === "word/document.xml"));
   const rendered = new Map<string, Uint8Array>();
+  const counter = { n: 0 };
   try {
     for (const name of parts) {
-      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages)));
+      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter)));
     }
   } catch (e) {
     throw new DocxFormatError(`${e instanceof Error ? e.message : String(e)}`);

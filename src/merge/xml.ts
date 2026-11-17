@@ -19,6 +19,8 @@ export interface XEl {
   /** Position of a w:p or w:tr in the part, used in error locations. */
   ord: number;
   cache?: unknown;
+  /** Further paragraphs a value's line breaks split this one into, in order. */
+  rest?: XEl[];
 }
 
 export type XNode = XText | XEl;
@@ -188,7 +190,7 @@ export function serializeXml(doc: XEl): string {
 
 /** Deep copy; elements removed from the source are not copied. */
 export function cloneEl(el: XEl, parent: XEl | null = null): XEl {
-  const copy: XEl = { ...el, children: [], parent, cache: undefined, dead: false };
+  const copy: XEl = { ...el, children: [], parent, cache: undefined, dead: false, rest: undefined };
   for (const c of el.children) {
     if (c.kind === "text") {
       copy.children.push(c);

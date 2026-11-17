@@ -33,10 +33,9 @@ describe("fields", () => {
     expect(await texts(para("<<missing>>"), {})).toEqual([""]);
   });
 
-  it("turns a newline in a value into a line break", async () => {
+  it("ends the paragraph at a newline in a value, as Docmosis does", async () => {
     const out = await merge(para("x <<v>> y"), { v: "one\ntwo" });
-    expect(partXml(out)).toContain("<w:br/>");
-    expect(paragraphs(out)).toEqual(["x one\ntwo y"]);
+    expect(paragraphs(out)).toEqual(["x one", "two y"]);
   });
 
   it("reads dotted paths and ignores heading noise", async () => {
@@ -44,8 +43,8 @@ describe("fields", () => {
     expect(await texts(para("<<## unterminated <<a.b>>"), { a: { b: "x" } })).toEqual(["<<## unterminated x"]);
   });
 
-  it("removes comments", async () => {
-    expect(await texts(para("a<</* note */>>b"), {})).toEqual(["ab"]);
+  it("removes the whole paragraph that holds a comment, as Docmosis does", async () => {
+    expect(await texts(para("a<</* note */>>b") + para("kept"), {})).toEqual(["kept"]);
   });
 
   it("removes the paragraph for a blank op: field", async () => {
@@ -106,13 +105,13 @@ describe("conditional sections", () => {
   it("handles inline blocks split across runs", async () => {
     const b = para(run("A <<c", "<w:b/>"), run("s_flag>>", "<w:i/>"), run("X", "<w:u/>"), run("<<es_", "<w:b/>"), run(">> Z"));
     expect(await texts(b, { flag: true })).toEqual(["A X Z"]);
-    expect(await texts(b, { flag: false })).toEqual(["A  Z"]);
+    expect(await texts(b, { flag: false })).toEqual(["A Z"]);
   });
 
   it("keeps the text around a block spanning paragraphs with the markers in their text", async () => {
     const b = para("one <<cs_flag>>two") + para("three<<es_>> four");
-    expect(await texts(b, { flag: true })).toEqual(["one ", "two", "three", " four"]);
-    expect(await texts(b, { flag: false })).toEqual(["one ", " four"]);
+    expect(await texts(b, { flag: true })).toEqual(["one two", "three four"]);
+    expect(await texts(b, { flag: false })).toEqual(["one four"]);
   });
 
   it("keeps drawings between inline markers only when the branch is kept", async () => {
@@ -279,7 +278,7 @@ describe("table rows", () => {
         { name: "y", k: [{ v: 3 }] }
       ]
     };
-    expect(paragraphs(await merge(outer, data))).toEqual(["x", "1", "2", "", "y", "3", ""]);
+    expect(paragraphs(await merge(outer, data))).toEqual(["x", "1", "2", "", "y", "3", "", ""]);
   });
 });
 
@@ -290,30 +289,32 @@ describe("errors", () => {
     expect(err).toBeInstanceOf(MergeError);
     expect((err as MergeError).message).toBe("Template merge failed");
     const details = (err as MergeError).details;
-    expect(details).toHaveLength(2);
-    expect(details[0]).toContain("<<es_>>");
+    expect(details).toHaveLength(1);
+    expect(details[0]).toContain('Unmatched ending tag "es_"');
     expect(details[0]).toContain("word/document.xml");
     expect(details[0]).toContain("paragraph 2");
-    expect(details[1]).toContain("<<cs_never>>");
   });
 
-  it("writes the error into the document in devMode", async () => {
-    const out = await merge(para("a <<es_>> b"), {}, dev);
-    expect(paragraphs(out)).toEqual(["a [ERROR: closes nothing, no matching cs_ or rs_ <<es_>>] b"]);
+  it("names the unclosed section when nothing else is wrong", async () => {
+    const err = await merge(para("<<cs_never>>closing missing"), {}).catch((e: unknown) => e);
+    expect((err as MergeError).details[0]).toContain("Section not ended. Name: cs_never");
   });
 
-  it("reports an unbalanced block", async () => {
-    const out = await merge(para("<<cs_x>>") + para("t"), {}, dev);
-    expect(paragraphs(out)[0]).toContain("block is never closed");
-    expect(paragraphs(out)).toHaveLength(2);
+  it("leaves the template text alone and marks the fault in devMode", async () => {
+    const out = await merge(para("<<v>> a <<es_>> b"), { v: "x" }, dev);
+    expect(paragraphs(out)).toEqual(["<<analysis>>Docmosis1<<v>> a <<es_>> b"]);
+  });
+
+  it("marks an unclosed block in front of its tag in devMode", async () => {
+    const out = await merge(para("B<<cs_x>>") + para("t"), {}, dev);
+    expect(paragraphs(out)).toEqual(["B<<analysis>>Docmosis1<<cs_x>>", "t"]);
   });
 
   it("reports else outside a block and row markers outside a table", async () => {
     const out = await merge(para("<<else>>") + para("<<er_>>") + para("<<rr_x>>"), {}, dev);
-    const t = paragraphs(out);
-    expect(t[0]).toContain("is not inside a cs_ or cr_ block");
-    expect(t[1]).toContain("closes nothing");
-    expect(t[2]).toContain("never closed");
+    expect(paragraphs(out)).toEqual(["<<analysis>>Docmosis1<<else>>", "<<analysis>>Docmosis2<<er_>>", "<<analysis>>Docmosis3<<rr_x>>"]);
+    const err = await merge(para("<<er_>>"), {}).catch((e: unknown) => e);
+    expect((err as MergeError).details[0]).toContain("not inside a table");
   });
 
   it("reports an unterminated <<", async () => {
@@ -323,7 +324,8 @@ describe("errors", () => {
 
   it("reports a row block with no closing row", async () => {
     const err = await merge(table(row(cell(para("<<cr_x>>"))), row(cell(para("r")))), {}).catch((e: unknown) => e);
-    expect((err as MergeError).details[0]).toContain("<<cr_x>>");
+    expect((err as MergeError).details[0]).toContain("Section not ended");
+    expect((err as MergeError).details[0]).toContain("cr_x");
   });
 
   it("collects errors across headers", async () => {
