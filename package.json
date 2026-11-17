@@ -26,7 +26,7 @@
     "test:crossbrowser": "echo 'No UI, no cross-browser tests' && exit 0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.6.4",
+    "@biomejs/biome": "2.6.8",
     "@types/busboy": "^1.5.5",
     "@types/node": "24.19.2",
     "@vitest/coverage-v8": "5.0.5",
