@@ -71,6 +71,14 @@ Render failures return HTTP 400 as Docmosis does, with the first problem in `sho
 | `SOFFICE_POOL_SIZE` | 2 | Concurrent conversions |
 | `SOFFICE_TIMEOUT_MS` | 60000 | Per-conversion timeout |
 
+## Fonts
+
+The image carries the fonts of the Docmosis image (`hmcts/rdo-docmosis`, Fedora 40), file for file, so that line breaks and page counts match: the Microsoft core fonts including Calibri, Cambria and Tahoma, Open Sans, GNU FreeFont, Cantarell, Noto Sans, Source Code Pro, the X11 Type1 fonts, and the fonts LibreOffice 7.6.7.2 bundles. There are no Alpine font packages. `docker/fonts/install-fonts.sh` downloads each source, `sources.sha256` pins them, and `fonts.sha256` lists every installed font as taken from the running Docmosis image. The build fails if either check does not pass. `docker/fonts/99-docmosis.conf` makes fontconfig scan the same directories as Docmosis.
+
+`fc-match` returns the same file for every family in the template corpus as the Docmosis image does. To check, run `fc-match "<family>" file` in this container and in `docmosis-local`.
+
+The one exception is Book Antiqua, a commercial Monotype font that this public repository does not include. Templates that ask for it fall back to another serif face. To match Docmosis there too, put `BKANT.TTF` in `docker/fonts/` (it is gitignored) and build with `--build-arg INSTALL_BOOK_ANTIQUA=true`.
+
 ## Run it locally
 
 ```

@@ -24,3 +24,4 @@ tfplan
 .idea/
 .DS_Store
 .claude/worktrees/
+docker/fonts/BKANT.TTF

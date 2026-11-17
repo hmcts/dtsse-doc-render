@@ -26,14 +26,24 @@ FROM dependencies AS production-dependencies
 
 RUN yarn workspaces focus --production
 
+FROM base AS fonts
+
+# The font set of the hmcts/rdo-docmosis image, so that fonts, and with them line breaks and page counts, match the
+# licensed renderer. Book Antiqua is a commercial Monotype font and is not in this public repository, so it is off by
+# default; INSTALL_BOOK_ANTIQUA=true expects docker/fonts/BKANT.TTF to be supplied at build time.
+ARG INSTALL_BOOK_ANTIQUA=false
+USER root
+RUN apk add --no-cache curl cabextract libarchive-tools
+COPY docker/fonts /docker-fonts
+RUN INSTALL_BOOK_ANTIQUA=${INSTALL_BOOK_ANTIQUA} /docker-fonts/install-fonts.sh /out
+
 FROM base AS runtime
 
 # Writer, Calc and Impress are installed because uploads to /rs/convert include xlsx and pptx. Alpine's libreoffice-common drags in Qt6, GTK, GStreamer, Mesa/LLVM and Python for GUI, media and scripting
 # features that a headless conversion never loads, so those packages' files are removed in the same
 # layer as the install. The apk database still lists them; the smoke conversion below fails the build if a prune
-# ever removes something Writer needs. The metric-compatible families (Liberation for Arial/Times New Roman/Courier
-# New, Carlito for Calibri) stand in for the Microsoft fonts, and Cambria falls back to a serif face because Alpine
-# has no Caladea package.
+# ever removes something Writer needs. No font package is installed from Alpine: the fonts stage supplies the
+# Docmosis set, and fontconfig is told how to substitute missing families the way Docmosis does.
 USER root
 RUN apk add --no-cache \
       libreoffice-writer \
@@ -41,19 +51,17 @@ RUN apk add --no-cache \
       libreoffice-impress \
       tini \
       fontconfig \
-      font-liberation \
-      font-carlito \
-      font-dejavu \
-      font-opensans \
-      font-freefont \
     && for pkg in $(apk list -I | sed 's/-[0-9][^ ]* .*//' | grep -E '^(llvm[0-9]*-libs|mesa(-.*)?|qt6-.*|gtk\+3\.0|gtk4\.0|gstreamer.*|gst-plugins-.*|flite|x265-libs|aom-libs|libSvtAv1Enc|openh264|openal-soft-libs|directfb|spirv-tools|python3(-.*)?)$'); do \
         apk info -L "$pkg" | grep -v ':$' | grep -v '^$' | sed 's|^|/|' | xargs -r rm -rf; \
       done \
     && cd /usr/lib/libreoffice \
     && rm -rf help program/classes program/libpyuno.so program/libpythonloaderlo.so program/pyuno* program/python* \
               share/config/images_*.zip share/gallery share/template share/wizards share/Scripts share/librelogo \
-    && find share/config/soffice.cfg/modules -mindepth 1 -maxdepth 1 -not \( -name swriter -o -name scalc -o -name simpress -o -name sdraw \) -exec rm -rf {} + \
-    && fc-cache -f
+    && find share/config/soffice.cfg/modules -mindepth 1 -maxdepth 1 -not \( -name swriter -o -name scalc -o -name simpress -o -name sdraw \) -exec rm -rf {} +
+
+COPY --from=fonts /out/ /
+COPY docker/fonts/99-docmosis.conf /etc/fonts/conf.d/99-docmosis.conf
+RUN fc-cache -f
 
 WORKDIR /app
 RUN chown -R hmcts:hmcts /app
