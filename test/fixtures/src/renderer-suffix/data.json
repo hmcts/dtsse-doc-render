@@ -1,0 +1,17 @@
+{
+  "hearing": "2026-03-15",
+  "stamp": "2026-03-15T14:30:00",
+  "issued": "15 Mar 2026",
+  "nothing": null,
+  "empty": "",
+  "dates": ["2026-01-02", "2026-12-31"],
+  "amount": 1234.5678,
+  "amountText": "1,234.5",
+  "padded": "007",
+  "ratio": 0.256,
+  "small": 0.5,
+  "yes": true,
+  "no": false,
+  "flagText": "yes",
+  "word": "hello"
+}

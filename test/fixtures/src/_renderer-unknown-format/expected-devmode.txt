@@ -1,0 +1,3 @@
+Before
+<<ok{renderer=boolean('maybe')}>>Docmosis1
+After

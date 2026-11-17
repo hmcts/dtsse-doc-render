@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { diffLines } from "./compare-lib.mjs";
-import { fixtureData, fixtureNames, fixturesDir, outcomeLines, renderOnDocmosis, renderOnRenderer, srcDir } from "./lib.mjs";
+import { fixtureData, fixtureIncludes, fixtureNames, fixturesDir, outcomeLines, renderOnDocmosis, renderOnRenderer, srcDir } from "./lib.mjs";
 
 const wanted = process.argv.slice(2);
 const names = fixtureNames().filter((name) => wanted.length === 0 || wanted.includes(name));
@@ -47,7 +47,11 @@ const report = (label, problems) => {
 for (const name of names) {
   const docx = join(fixturesDir, `${name}.docx`);
   const data = fixtureData(name);
-  const both = async (devMode) => [await renderOnDocmosis(docx, data, { devMode, label: name }), await renderOnRenderer(docx, data, { devMode, label: name })];
+  const includes = fixtureIncludes(name);
+  const both = async (devMode) => [
+    await renderOnDocmosis(docx, data, { devMode, label: name, includes }),
+    await renderOnRenderer(docx, data, { devMode, label: name, includes })
+  ];
 
   const [docmosis, renderer] = await both(false);
   if (name.startsWith("_")) {

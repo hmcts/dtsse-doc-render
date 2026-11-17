@@ -5,8 +5,11 @@
 // Names are file names without ".docx". The data is built from the data names each template reads: a repeat gets two
 // items, a bare condition gets true, everything else a "v_<name>" string, and dates are shaped to the input pattern of the
 // dateFormat that reads them. Output files (data, both texts and a diff) go to --dir, default a temp directory.
+// A template that calls ref:<name> has the templates it names, found in the same directory, sent with it (and copied into
+// Docmosis's store under that name), and its sample data is the union of theirs. refLookup: names cannot be read from a
+// template, so those includes are not sent.
 // Environment variables are the same as compare.mjs.
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { unzip } from "../support/zip.ts";
@@ -240,14 +243,39 @@ export function generateData(docx) {
   return data;
 }
 
+/** The templates named by ref: tags in a template and in the templates those name, read from the directory the template is in. */
+function includesOf(docx, dir, found = {}) {
+  const text = [...unzip(docx).values()].map((b) => b.toString("utf8")).join("");
+  const tags = decode(text.replace(/<[^>]+>/g, "")).matchAll(/<<ref:([^<>]+?)\s*>>/g);
+  for (const [, ref] of tags) {
+    const file = join(dir, ref);
+    if (!(ref in found) && existsSync(file)) {
+      found[ref] = readFileSync(file);
+      includesOf(found[ref], dir, found);
+    }
+  }
+  return found;
+}
+
+function merged(a, b) {
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return Array.from({ length: Math.max(a.length, b.length) }, (_, i) => (a[i] !== undefined && b[i] !== undefined ? merged(a[i], b[i]) : (a[i] ?? b[i])));
+  }
+  if (a && b && typeof a === "object" && typeof b === "object") {
+    return { ...a, ...Object.fromEntries(Object.entries(b).map(([k, v]) => [k, k in a ? merged(a[k], v) : v])) };
+  }
+  return a ?? b;
+}
+
 let differing = 0;
 for (const name of names) {
   const file = join(templatesDir, `${name.replace(/\.docx$/, "")}.docx`);
-  const data = generateData(readFileSync(file));
+  const includes = includesOf(readFileSync(file), templatesDir);
+  const data = Object.values(includes).reduce((all, template) => merged(all, generateData(template)), generateData(readFileSync(file)));
   writeFileSync(join(outDir, `${name}.json`), JSON.stringify(data, null, 1));
   const [docmosis, renderer] = [
-    await renderOnDocmosis(file, data, { devMode: true, label: name }),
-    await renderOnRenderer(file, data, { devMode: true, label: name })
+    await renderOnDocmosis(file, data, { devMode: true, label: name, includes }),
+    await renderOnRenderer(file, data, { devMode: true, label: name, includes })
   ];
   const [a, b] = [outcomeLines(docmosis), outcomeLines(renderer)];
   writeFileSync(join(outDir, `${name}.docmosis.txt`), `${a.join("\n")}\n`);

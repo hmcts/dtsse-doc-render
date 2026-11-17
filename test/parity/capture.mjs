@@ -10,13 +10,15 @@
 //   merge fixtures   expected.txt            the merged text of the docx render
 //   "_" fixtures     expected-error.txt      Docmosis's HTTP status and error message with devMode off
 //                    expected-devmode.txt    the document text with devMode on, where errors are written in place
+// A fixture with an includes/ directory sends those templates too: they are copied into Docmosis's store under the names its
+// ref: tags use, so give them names no other fixture uses.
 // An "_" fixture's error-phrase.txt is hand-written: the phrase every backend's error message must contain. This script
 // fails if Docmosis's own message does not contain it.
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docxText, fixtureData, fixtureNames, fixturesDir, renderOnDocmosis, srcDir } from "./lib.mjs";
+import { docxText, fixtureData, fixtureIncludes, fixtureNames, fixturesDir, renderOnDocmosis, srcDir } from "./lib.mjs";
 
 execFileSync(process.execPath, [fileURLToPath(new URL("../fixtures/build.mjs", import.meta.url))], { stdio: "inherit" });
 
@@ -28,9 +30,10 @@ for (const name of names) {
   const docx = join(fixturesDir, `${name}.docx`);
   const dir = join(srcDir, name);
   const data = fixtureData(name);
+  const includes = fixtureIncludes(name);
 
   if (name.startsWith("_")) {
-    const failed = await renderOnDocmosis(docx, data, { label: name });
+    const failed = await renderOnDocmosis(docx, data, { label: name, includes });
     if (failed.ok) {
       console.log(`FAIL ${name}: Docmosis rendered a fixture that is meant to be an error`);
       failures++;
@@ -47,7 +50,7 @@ for (const name of names) {
       join(dir, "expected-error.txt"),
       `status: ${failed.status}\nshortMsg: ${message}\n${failed.error.longMsg ? `longMsg: ${failed.error.longMsg}\n` : ""}`
     );
-    const dev = await renderOnDocmosis(docx, data, { devMode: true, label: `${name}-dev` });
+    const dev = await renderOnDocmosis(docx, data, { devMode: true, label: `${name}-dev`, includes });
     if (!dev.ok) {
       console.log(`FAIL ${name}: devMode render failed: ${dev.error?.shortMsg}`);
       failures++;
@@ -58,7 +61,7 @@ for (const name of names) {
     continue;
   }
 
-  const result = await renderOnDocmosis(docx, data, { label: name });
+  const result = await renderOnDocmosis(docx, data, { label: name, includes });
   if (!result.ok) {
     console.log(`FAIL ${name}: ${result.error?.shortMsg}`);
     failures++;

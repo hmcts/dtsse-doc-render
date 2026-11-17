@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-heading.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Dear &lt;&lt;party.name&gt;&gt;,</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Before &lt;&lt;ref:ref-basic-inline.docx&gt;&gt; after.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$reference=case.number&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-signoff.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Signed: &lt;&lt;$signedBy&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;rs_parties&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-party.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_parties&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_showFooter&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-footer.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_hideFooter&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-never-supplied.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">Left</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-party.docx&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-basic-footer.docx&gt;&gt;&lt;&lt;ref:ref-basic-footer.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The end.</w:t></w:r></w:p>
+  </w:body>
+</w:document>

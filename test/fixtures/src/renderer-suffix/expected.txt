@@ -1,0 +1,15 @@
+Date: 15 March 2026
+Curly quotes: 15 Mar 2026
+Date and time: 15/03/2026
+Default input: 2026-03-15
+Blank date: [] [] []
+In a repeat: 02/01/26; 31/12/26;
+Number: 1,234.57 1235 1234.6 1234.5678
+Number text: 1,234.50 1234.5 7
+Number pattern: £1,234.57 25.6% .5 1,234.5678
+Blank number: [] []
+Boolean: true false Yes No
+Boolean formats: YN YES no ✓✘
+Boolean from text: Yes No No
+Unknown renderer keeps the value: hello hello
+Not a string: 2026

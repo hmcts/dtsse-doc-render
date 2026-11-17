@@ -1,7 +1,9 @@
 import { ExpressionError, LimitError } from "./errors.ts";
 import { evaluate, formatValue, type Instruction, repeatItems, type Scope, truthy } from "./expr.ts";
+import { IncludeError, type IncludeHost } from "./include.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
-import { type Found, hasContent, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
+import { type Found, hasContent, NODE_CHAR, type Para, paraOf, REF_BREAK, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
+import { applyRenderer, RenderError } from "./renderer.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, stripIllegalXml, type XEl, type XNode } from "./xml.ts";
 
 /** What one merge has produced so far, checked against the limits as it goes. */
@@ -40,7 +42,20 @@ export interface Ctx {
   counter: { n: number };
   /** Headers and footers describe a fault in place; the body numbers them. */
   body: boolean;
+  /** The part being merged, as opposed to `part`, which names the template whose paragraphs are being read. */
+  file: string;
+  host?: IncludeHost;
+  /** The templates being included right now, outermost first. */
+  refStack: string[];
+  /** Namespaces the part root declares, and those an include needs added to it. */
+  ns: Map<string, string>;
+  nsAdd: Map<string, string>;
 }
+
+/** Why an included template could not be merged here, in Docmosis's words. */
+class RefFailure extends Error {}
+
+const MAX_INCLUDE_DEPTH = 16;
 
 interface Marker {
   kind: "cs" | "cr" | "rs" | "rr" | "es" | "er" | "else";
@@ -286,7 +301,10 @@ export function htmlToText(html: string): string {
  * precedes the first tag). A tag written with a space after `<<` does not count as a tag here.
  */
 function keepsParagraph(para: Para): boolean {
-  if (para.found.length === 0 || para.found.some((f) => f.ins.kind === "field" || f.ins.kind === "unsupported" || /^\s/.test(f.body))) {
+  if (
+    para.found.length === 0 ||
+    para.found.some((f) => f.ins.kind === "field" || f.ins.kind === "ref" || f.ins.kind === "refLookup" || f.ins.kind === "unsupported" || /^\s/.test(f.body))
+  ) {
     return true;
   }
   const first = para.found[0]!.start;
@@ -333,6 +351,118 @@ function emptyLike(el: XEl): XEl {
   return p;
 }
 
+/** Merges the template a `ref:` or `refLookup:` names with the scope the tag is in, and returns what it produces. */
+function includeNodes(ins: Extract<Instruction, { kind: "ref" | "refLookup" }>, scope: Scope, ctx: Ctx): XEl[] {
+  let name: string;
+  let lookup = "";
+  if (ins.kind === "ref") {
+    name = ins.name;
+  } else {
+    const value = evaluate(ins.path, scope);
+    name = formatValue(value);
+    if (name.trim() === "") {
+      throw new RefFailure(`Can't load sub-template: no lookup name found via lookup:${ins.path}`);
+    }
+    lookup = ` via data lookup: [${name}]`;
+  }
+  if (!ctx.host?.has(name)) {
+    throw new RefFailure(`Template Not found [${name}]${lookup}`);
+  }
+  if (ctx.refStack.includes(name)) {
+    throw new RefFailure(`Template Circular Reference: template [${ctx.refStack.at(-1) ?? ctx.part}] is calling [${name}]`);
+  }
+  if (ctx.refStack.length >= MAX_INCLUDE_DEPTH) {
+    throw new RefFailure(`Template [${name}] is included more than ${MAX_INCLUDE_DEPTH} levels deep`);
+  }
+  let instance: ReturnType<IncludeHost["instantiate"]>;
+  try {
+    instance = ctx.host.instantiate(name, ctx.file, ctx.ns, ctx.nsAdd);
+  } catch (e) {
+    if (e instanceof IncludeError) {
+      throw new RefFailure(e.message);
+    }
+    throw e;
+  }
+  spend(ctx, instance.count, 0);
+  const container = makeEl("w:body", "<w:body>", instance.nodes);
+  const outer = ctx.part;
+  ctx.part = name;
+  ctx.refStack.push(name);
+  try {
+    const issues = analyse(container, ctx);
+    if (issues.length > 0) {
+      reportIssues(issues, ctx);
+      return container.children.filter((n): n is XEl => n.kind === "el" && !n.dead);
+    }
+    return processList(container.children, scope, ctx).filter((n): n is XEl => n.kind === "el" && !n.dead);
+  } finally {
+    ctx.refStack.pop();
+    ctx.part = outer;
+  }
+}
+
+function absorb(into: XEl, from: XEl): void {
+  for (const c of from.children) {
+    if (c.kind === "el" && c.name === "w:pPr") {
+      continue;
+    }
+    if (c.kind === "el") {
+      c.parent = into;
+    }
+    into.children.push(c);
+  }
+}
+
+/**
+ * Puts each included template where its tag was in the paragraph. Docmosis runs the first included paragraph on from the
+ * text before the tag, in that paragraph's own properties, and the text after the tag on from the last: a tag alone in
+ * its paragraph is replaced by the included content.
+ */
+function placeIncludes(parts: XEl[], refs: XEl[][]): XEl[] {
+  const out: XEl[] = [];
+  let cur: XEl | null = parts[0]!;
+  let k = 0;
+  for (const part of parts.slice(1)) {
+    if (!part.refBreak) {
+      if (cur) {
+        out.push(cur);
+      }
+      cur = part;
+      continue;
+    }
+    const nodes = refs[k++] ?? [];
+    const list: XEl[] = [];
+    if (cur && cur.name === "w:p" && hasContent(cur)) {
+      if (nodes[0]?.name === "w:p") {
+        absorb(cur, nodes[0]);
+        list.push(cur, ...nodes.slice(1));
+      } else {
+        list.push(cur, ...nodes);
+      }
+    } else {
+      list.push(...nodes);
+    }
+    if (hasContent(part)) {
+      const last = list.at(-1);
+      if (last?.name === "w:p") {
+        absorb(last, part);
+      } else {
+        list.push(part);
+      }
+    }
+    out.push(...list.slice(0, -1));
+    cur = list.at(-1) ?? null;
+    if (cur && cur.name !== "w:p") {
+      out.push(cur);
+      cur = null;
+    }
+  }
+  if (cur) {
+    out.push(cur);
+  }
+  return out;
+}
+
 const WHOLE_PARA = (para: Para, f: Found): boolean => f.start === 0 && f.end === para.text.length && para.found.length === 1;
 
 function withoutParagraphProperties(el: XEl): void {
@@ -369,6 +499,7 @@ function renderFragment(
     return { el, seam: null };
   }
   let hadMarker = false;
+  const refs: XEl[][] = [];
   let opBlank = false;
   let pageBreak = false;
   let bare = false;
@@ -417,7 +548,8 @@ function renderFragment(
           pageBreak = true;
           continue;
         }
-        const raw = cleanValue(formatValue(evaluate(ins.expr, scope)));
+        const evaluated = evaluate(ins.expr, scope);
+        const raw = cleanValue(ins.renderer ? applyRenderer(ins.renderer, evaluated, ins.expr) : formatValue(evaluated));
         const html = (ins as { html?: boolean }).html === true;
         const value = html ? htmlToText(raw) : raw;
         spend(ctx, 0, value.length);
@@ -432,6 +564,13 @@ function renderFragment(
           carry = false;
           atStart = false;
         }
+      } else if (ins.kind === "ref" || ins.kind === "refLookup") {
+        refs.push(includeNodes(ins, scope, ctx));
+        para.kill(f.start, f.end);
+        para.insert(f.start, REF_BREAK);
+        tail = -1;
+        carry = false;
+        atStart = false;
       } else if (ins.kind === "assign") {
         scope.setVar(ins.name, evaluate(ins.expr, scope));
         para.kill(f.start, f.end);
@@ -452,10 +591,16 @@ function renderFragment(
       if (e instanceof LimitError) {
         throw e;
       }
-      failAt(
-        f,
-        `Unable to evaluate field expression [${straighten(f.body.trim().replace(/^\{([\s\S]*)\}$/, "$1"))}]:${e instanceof Error ? e.message : String(e)}`
-      );
+      if (e instanceof RefFailure) {
+        failAt(f, e.message);
+      } else if (e instanceof RenderError) {
+        failAt(f, `Cannot render field "${ins.kind === "field" ? ins.expr : ""}":${e.message}`);
+      } else {
+        failAt(
+          f,
+          `Unable to evaluate field expression [${straighten(f.body.trim().replace(/^\{([\s\S]*)\}$/, "$1"))}]:${e instanceof Error ? e.message : String(e)}`
+        );
+      }
       tail = -1;
       carry = false;
     }
@@ -466,7 +611,7 @@ function renderFragment(
   if (opBlank) {
     return { el: "op", seam };
   }
-  if (hadMarker && !content && !hasSectPr(el) && !joined && !keeps) {
+  if (hadMarker && !content && !hasSectPr(el) && !joined && !keeps && refs.length === 0) {
     return { el: null, seam };
   }
   if (pageBreak) {
@@ -479,11 +624,15 @@ function renderFragment(
   }
   processTextBoxes(para, scope, ctx);
   splitAfterPageBreaks(el);
-  const parts = splitAtBreaks(el);
-  if (parts.length > 1) {
-    el.rest = parts.slice(1);
+  const parts = refs.length > 0 ? placeIncludes(splitAtBreaks(el), refs) : splitAtBreaks(el);
+  const first = parts[0];
+  if (!first) {
+    return { el: null, seam };
   }
-  return { el, seam };
+  if (parts.length > 1) {
+    first.rest = parts.slice(1);
+  }
+  return { el: first, seam };
 }
 
 function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epoch: number, ctx: Ctx): void {
@@ -524,7 +673,7 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
       out.lastFrag = null;
       out.seam = false;
     } else if (r) {
-      if (joined && out.last) {
+      if (joined && out.last && r.name === "w:p") {
         for (const c of r.children) {
           if (c.kind === "el" && c.name === "w:pPr") {
             continue;
@@ -675,7 +824,7 @@ function dropBreaksBefore(para: Para, upTo: number): boolean {
   return only;
 }
 
-/** Docmosis drops a page break that ends a block: one just before an end tag in the same paragraph, or alone in the paragraph before one. */
+/** Docmosis drops a page break that ends a block: one just before an end tag in the same paragraph, or alone in the paragraph before an end tag that is the whole of its paragraph. */
 function dropTrailingPageBreaks(children: XNode[]): void {
   let prev: XEl | null = null;
   for (const c of children) {
@@ -693,7 +842,7 @@ function dropTrailingPageBreaks(children: XNode[]): void {
         continue;
       }
       const before = para.text.slice(0, f.start);
-      if (before.trim() === "" && !before.includes(NODE_CHAR) && prev) {
+      if (before.trim() === "" && !before.includes(NODE_CHAR) && prev && !keepsParagraph(para)) {
         const pp = paraOf(prev);
         if (dropBreaksBefore(pp, pp.text.length) && pp.text.includes(NODE_CHAR)) {
           touched.add(prev);
@@ -897,7 +1046,9 @@ const tagName = (body: string): string => body.trim().replace(/^[a-z]+_\s*/i, ""
 function sectionEnd(open: { body: string; para: Para; f: Found }, end: { body: string }): string | null {
   const wanted = tagName(end.body);
   const have = tagName(open.body);
-  return wanted !== "" && wanted !== have ? `Mismatched sections.  Expecting section end for section "${have}" but end is for section "${wanted}"` : null;
+  return wanted !== "" && straighten(wanted) !== straighten(have)
+    ? `Mismatched sections.  Expecting section end for section "${have}" but end is for section "${wanted}"`
+    : null;
 }
 
 interface Tag {
@@ -988,7 +1139,9 @@ function expressionIssues(children: XNode[], issues: Issue[]): void {
           .trim()
           .replace(/^(?:[a-z]{2}_|op:)\s*/i, "")
           .replace(/^\{([\s\S]*)\}$/, "$1");
-        if (f.ins.kind !== "comment" && f.ins.kind !== "unsupported" && unclosedBracket(expr)) {
+        if (f.ins.kind === "field" && f.ins.qualifierError) {
+          issues.push({ para, el: c, reason: f.ins.qualifierError, at: 0 });
+        } else if (f.ins.kind !== "comment" && f.ins.kind !== "unsupported" && !(f.ins.kind === "field" && f.ins.renderer) && unclosedBracket(expr)) {
           issues.push({ para, el: c, reason: `Expression error for [${straighten(expr)}]:Function is not closed.`, at: 0 });
         }
       }
@@ -1092,7 +1245,8 @@ export function renderPart(
   devMode: boolean,
   messages: string[],
   counter: { n: number } = { n: 0 },
-  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 }
+  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 },
+  host?: IncludeHost
 ): string {
   const doc = parseXml(xml);
   const root = childEls(doc)[0];
@@ -1100,13 +1254,30 @@ export function renderPart(
     return xml;
   }
   const container = root.name === "w:document" ? (childEls(root, "w:body")[0] ?? root) : root;
-  const ctx: Ctx = { budget, devMode, messages, part, epoch: 0, counter, body: part === "word/document.xml" };
+  const ctx: Ctx = {
+    budget,
+    devMode,
+    messages,
+    part,
+    epoch: 0,
+    counter,
+    body: part === "word/document.xml",
+    file: part,
+    host,
+    refStack: [],
+    ns: new Map([...root.open.matchAll(/\sxmlns:([\w.-]+)\s*=\s*"([^"]*)"/g)].map((m) => [m[1]!, m[2]!])),
+    nsAdd: new Map()
+  };
   const issues = analyse(container, ctx);
   if (issues.length > 0) {
     reportIssues(issues, ctx);
     return serializeXml(doc);
   }
   container.children = processList(container.children, scope, ctx);
+  if (ctx.nsAdd.size > 0) {
+    const decls = [...ctx.nsAdd].map(([prefix, uri]) => ` xmlns:${prefix}="${uri}"`).join("");
+    root.open = root.open.replace(/^<([^\s>/]+)/, `<$1${decls}`);
+  }
   if (container.name === "w:body") {
     endWithParagraph(container);
   }

@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<word{renderer=date('yyyy','yyyy-MM-dd')}>> Cannot render field "word":Can't parse field into a date (field="word" Cannot parse date:value="hello" formats applied=["yyyy-MM-dd"])

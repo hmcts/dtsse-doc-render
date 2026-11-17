@@ -1,0 +1,5 @@
+LETTER HEADER from Registry
+Order document: Order
+Free text only
+Notice document: Notice
+Name from the data: LETTER HEADER from Registry

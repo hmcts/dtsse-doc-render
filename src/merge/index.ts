@@ -16,6 +16,8 @@ export interface MergeOptions {
   devMode: boolean;
   now?: Date;
   limits?: Partial<Limits>;
+  /** Templates a `ref:` or `refLookup:` may name, by name. */
+  includes?: Record<string, Buffer>;
 }
 
 export async function mergeDocx(template: Buffer, data: unknown, options: MergeOptions): Promise<Buffer> {
