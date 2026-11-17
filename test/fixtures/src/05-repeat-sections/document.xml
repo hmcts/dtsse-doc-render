@@ -11,7 +11,7 @@
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{served}&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">   Served by &lt;&lt;servedBy&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
-    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;er_documents&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_documents&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">End of list.</w:t></w:r></w:p>
   </w:body>
 </w:document>
