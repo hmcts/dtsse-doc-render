@@ -146,8 +146,40 @@ const outputFormatOf = (params: Record<string, unknown>, outputName: string): Ou
   return (explicit || extensionOf(outputName)) === "docx" ? "docx" : "pdf";
 };
 
-const dataOf = (params: Record<string, unknown>): unknown => {
-  const { data } = params;
+const ZIP_MAGIC = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+const decodeBase64 = (value: string, label: string): Buffer => {
+  const encoded = value
+    .replace(/^\s*data:[^,]*,/i, "")
+    .replace(/\s+/g, "")
+    .replace(/-/g, "+")
+    .replace(/_/g, "/")
+    .replace(/=+$/, "");
+  if (encoded === "" || !/^[A-Za-z0-9+/]+$/.test(encoded) || encoded.length % 4 === 1) {
+    throw new HttpError(400, "Invalid templateBase64", `${label}: templateBase64 is not valid base64`);
+  }
+  return Buffer.from(encoded, "base64");
+};
+
+const inlineTemplateOf = ({ params, files }: ParsedRequest): Buffer | undefined => {
+  const name = typeof params.templateName === "string" && params.templateName !== "" ? params.templateName : "the inline template";
+  let content: Buffer | undefined;
+  if (files.templateFile) {
+    content = files.templateFile.content;
+  } else if (params.templateBase64 !== undefined && params.templateBase64 !== "") {
+    if (typeof params.templateBase64 !== "string") {
+      throw new HttpError(400, "Invalid templateBase64", `${name}: templateBase64 must be a base64 string`);
+    }
+    content = decodeBase64(params.templateBase64, name);
+  }
+  if (content && !content.subarray(0, ZIP_MAGIC.length).equals(ZIP_MAGIC)) {
+    throw new HttpError(400, "Invalid template", `${name} is not a .docx: the template bytes are not a zip archive`);
+  }
+  return content;
+};
+
+const dataOf = ({ params, files }: ParsedRequest): unknown => {
+  const data = files.data ? files.data.content.toString("utf8") : params.data;
   if (data === undefined || data === "") {
     return {};
   }
@@ -167,12 +199,14 @@ export const createHandler = (deps: Dependencies) => {
   const { store, merge, convert, accessKey, ready } = deps;
   const limit = deps.maxBodyBytes ?? MAX_BODY_BYTES;
 
-  const render = async ({ params }: ParsedRequest, response: ServerResponse): Promise<void> => {
-    const templateName = requireString(params, "templateName");
+  const render = async (parsed: ParsedRequest, response: ServerResponse): Promise<void> => {
+    const { params } = parsed;
+    const inline = inlineTemplateOf(parsed);
+    const templateName = inline ? "" : requireString(params, "templateName");
     const outputName = typeof params.outputName === "string" && params.outputName !== "" ? params.outputName : "output.pdf";
     const format = outputFormatOf(params, outputName);
-    const data = dataOf(params);
-    const template = await store.find(templateName);
+    const data = dataOf(parsed);
+    const template = inline ?? (await store.find(templateName));
     if (!template) {
       throw new HttpError(400, "Render failed: template does not exist", `The template '${templateName}' does not exist`);
     }
@@ -274,7 +308,7 @@ export const createHandler = (deps: Dependencies) => {
       } else if (error instanceof InvalidTemplateName) {
         sendError(response, new HttpError(400, "Invalid template name", error.message));
       } else if (error instanceof MergeError) {
-        sendError(response, new HttpError(400, `Render failed: ${error.message}`, [error.message, ...error.details].join("\n")));
+        sendError(response, new HttpError(400, error.details[0] ?? error.message, [error.message, ...error.details].join("\n")));
       } else if (error instanceof ConversionError) {
         sendError(response, new HttpError(500, "Conversion failed", error.message));
       } else {
