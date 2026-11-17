@@ -145,6 +145,13 @@ describe("Scope", () => {
     expect(r.lookup("$parent")).toBeUndefined();
   });
 
+  it("counts items from 1 in $itemnum and $num and from 0 in $idx, and a document outside any repeat is item 1, as Docmosis does", () => {
+    const item = root().child({}, 3, 5);
+    expect([item.lookup("$itemnum"), item.lookup("$num"), item.lookup("$idx")]).toEqual([3, 3, 2]);
+    const outside = root();
+    expect([outside.lookup("$itemnum"), outside.lookup("$num"), outside.lookup("$idx"), outside.lookup("$size")]).toEqual([1, 1, 0, 0]);
+  });
+
   it("$this may be a scalar", () => {
     expect(root().child("A", 1, 1).lookup("$this")).toBe("A");
     expect(root().child("A", 1, 1).lookup("$this.x")).toBeUndefined();
@@ -199,7 +206,7 @@ describe("Scope", () => {
     expect(r.lookup("$known")).toBeUndefined();
   });
 
-  it.each(["num", "itemnum", "this", "size", "root", "parent"])("Docmosis: $%s=5 is Cannot set built in variable", (name) => {
+  it.each(["num", "itemnum", "idx", "this", "size", "root", "parent"])("Docmosis: $%s=5 is Cannot set built in variable", (name) => {
     expect(() => root().setVar(name, 5)).toThrow(`Cannot set built in variable $${name}`);
   });
 });

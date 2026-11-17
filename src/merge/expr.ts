@@ -50,7 +50,7 @@ function descend(value: unknown, rest: Segment[]): unknown {
   return current;
 }
 
-const READ_ONLY = new Set(["num", "itemnum", "this", "size", "root", "parent"]);
+const READ_ONLY = new Set(["num", "itemnum", "idx", "this", "size", "root", "parent"]);
 
 export class Scope {
   readonly vars = new Map<string, unknown>();
@@ -115,7 +115,10 @@ export class Scope {
       case "parent":
         return descend(this.parent?.item, rest);
       case "itemnum":
-        return this.index;
+      case "num":
+        return this.index || 1;
+      case "idx":
+        return (this.index || 1) - 1;
       case "size":
         return this.size;
       case "nl":
