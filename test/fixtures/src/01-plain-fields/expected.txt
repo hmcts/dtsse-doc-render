@@ -1,0 +1,7 @@
+County Court Money Claims Centre
+Claim number: K1AB2345
+Ms Jane Smith
+1 High Street, Leeds LS1 1AA
+Dear Ms Jane Smith,
+Your claim against Acme Ltd and Mr Bob Jones has been issued.
+The claim amount is 1500.

@@ -1,0 +1,8 @@
+Dear Jane Smith,
+No. | Item
+1 | Issue fee
+2 | Hearing fee
+3 | Application fee
+1. Acme Ltd
+2. Mr Bob Jones
+Rows in table: 3, names counted: 2.

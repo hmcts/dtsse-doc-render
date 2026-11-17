@@ -1,0 +1,11 @@
+Defendants
+Defendant 1 of 3: Acme Ltd
+Defendant 2 of 3: Mr Bob Jones
+Defendant 3 of 3: Carol White Builders
+Documents served
+1. Particulars of claim (served, 12 pages)
+Served by post
+2. Response pack (not yet served)
+3. Witness statement (served, 4 pages)
+Served by email
+End of list.

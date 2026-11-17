@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{status = ‘pending’}&gt;&gt;Awaiting response from &lt;&lt;party&gt;&gt;.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{status = “pending”}&gt;&gt;Double smart quotes match.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{status != ’closed’ &amp;&amp; other = ‘a b’}&gt;&gt;Mixed quotes match.&lt;&lt;else&gt;&gt;Mixed quotes differ.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Party: &lt;&lt;party&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Condition: &lt;&lt;condition&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Address: &lt;&lt;$nl&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Literal break</w:t></w:r><w:r><w:br/></w:r><w:r><w:t xml:space="preserve">second line</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Line one&lt;&lt;$nl&gt;&gt;Line two</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;address.line1&gt;&gt;&lt;&lt;$nl&gt;&gt;&lt;&lt;address.line2&gt;&gt;&lt;&lt;$nl&gt;&gt;&lt;&lt;address.postcode&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Kept text.&lt;&lt;/* drafting note, not for output */&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

@@ -1,0 +1,21 @@
+{
+  "defendants": ["Acme Ltd", "Mr Bob Jones", "Carol White Builders"],
+  "documents": [
+    {
+      "title": "Particulars of claim",
+      "served": true,
+      "pages": 12,
+      "servedBy": "post"
+    },
+    {
+      "title": "Response pack",
+      "served": false
+    },
+    {
+      "title": "Witness statement",
+      "served": true,
+      "pages": 4,
+      "servedBy": "email"
+    }
+  ]
+}

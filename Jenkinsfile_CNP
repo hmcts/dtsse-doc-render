@@ -17,7 +17,8 @@ static Map<String, Object> secret(String secretName, String envVariable) {
 
 def secrets = [
   'dtsse-${env}': [
-    secret('AppInsightsConnectionString', 'APPLICATIONINSIGHTS_CONNECTION_STRING')
+    secret('AppInsightsConnectionString', 'APPLICATIONINSIGHTS_CONNECTION_STRING'),
+    secret('doc-render-access-key', 'TEST_ACCESS_KEY')
   ]
 ]
 
