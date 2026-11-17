@@ -10,7 +10,8 @@ const MIME: Record<string, string> = {
   docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
   doc: "application/msword",
   odt: "application/vnd.oasis.opendocument.text",
-  html: "text/html"
+  html: "text/html",
+  txt: "text/plain; charset=utf-8"
 };
 
 const CONVERTED_FORMATS = ["doc", "odt", "html", "txt"];
