@@ -1,0 +1,19 @@
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: "dtsse-doc-render"
+  description: "Unlicensed, API-compatible stand-in for Docmosis Tornado, for local development and non-production environments."
+  annotations:
+    jenkins.io/job-full-name: cft:HMCTS_d_to_i/dtsse-doc-render
+    github.com/project-slug: hmcts/dtsse-doc-render
+  tags:
+    - nodejs
+    - dtsse
+  links:
+    - url: https://hmcts-reform.slack.com/app_redirect?channel=dtsse-tech
+      title: "#dtsse-tech on Slack"
+      icon: chat
+spec:
+  type: service
+  lifecycle: experimental
+  owner: dtsse

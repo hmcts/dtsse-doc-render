@@ -1,0 +1,17 @@
+#!groovy
+
+properties([
+  pipelineTriggers([cron('H 07 * * 1-5')])
+])
+
+@Library("Infrastructure")
+
+def type = "nodejs"
+def product = "dtsse"
+def component = "doc-render"
+
+withNightlyPipeline(type, product, component) {
+  env.TEST_URL = "https://doc-render.aat.platform.hmcts.net"
+
+  enableFullFunctionalTest(10)
+}

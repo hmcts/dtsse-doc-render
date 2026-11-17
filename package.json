@@ -1,0 +1,36 @@
+{
+  "name": "dtsse-doc-render",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Unlicensed, API-compatible stand-in for Docmosis Tornado, for local development and non-production environments.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "yarn@4.18.1",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check --error-on-warnings .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:coverage": "vitest run --coverage",
+    "test:a11y": "echo 'No UI, nothing to check' && exit 0",
+    "test:smoke": "vitest run --config test/smoke/vitest.config.mts",
+    "test:functional": "vitest run --config test/functional/vitest.config.mts",
+    "test:fullfunctional": "echo 'No full functional suite yet' && exit 0",
+    "test:crossbrowser": "echo 'No UI, no cross-browser tests' && exit 0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.6.4",
+    "@types/node": "24.19.2",
+    "@vitest/coverage-v8": "5.0.5",
+    "typescript": "7.0.2",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
+  }
+}
