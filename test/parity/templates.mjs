@@ -1,6 +1,6 @@
 // Generates sample data for real templates and diffs a licensed Docmosis against a dtsse-doc-render instance.
 //
-//   node test/parity/templates.mjs <path to hmcts/docmosis Templates/Base> <template-name ...> [--dir <out>] [--pdf]
+//   node test/parity/templates.mjs <templates dir>/Base, a directory of real Docmosis templates <template-name ...> [--dir <out>] [--pdf]
 //
 // Names are file names without ".docx". The data is built from the data names each template reads: a repeat gets two
 // items, a bare condition gets true, everything else a "v_<name>" string, and dates are shaped to the input pattern of the
