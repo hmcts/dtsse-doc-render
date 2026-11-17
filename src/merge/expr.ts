@@ -17,24 +17,29 @@ export type Instruction =
 
 type Segment = string | number;
 
-const segmentCache = new Map<string, Segment[]>();
+/** Parsed paths and compiled expressions, keyed by caller-supplied text, so they live and die with one render. */
+class Caches {
+  readonly segments = new Map<string, Segment[]>();
+  readonly compiled = new Map<string, Node>();
+}
 
-function segments(path: string): Segment[] {
-  let cached = segmentCache.get(path);
+function segments(caches: Caches, path: string): Segment[] {
+  let cached = caches.segments.get(path);
   if (!cached) {
     cached = [];
     for (const m of path.matchAll(/([^.[\]]+)|\[(\d+)\]/g)) {
       cached.push(m[2] !== undefined ? Number(m[2]) : m[1]!);
     }
-    segmentCache.set(path, cached);
+    caches.segments.set(path, cached);
   }
   return cached;
 }
 
+/** Follows own properties only, so `constructor`, `__proto__` and the like are not reachable from data. */
 function descend(value: unknown, rest: Segment[]): unknown {
   let current = value;
   for (const seg of rest) {
-    if (current === null || typeof current !== "object") {
+    if (current === null || typeof current !== "object" || !Object.hasOwn(current, seg)) {
       return undefined;
     }
     current = (current as Record<string | number, unknown>)[seg];
@@ -46,6 +51,7 @@ const READ_ONLY = new Set(["num", "itemnum", "this", "size", "root", "parent"]);
 
 export class Scope {
   readonly vars = new Map<string, unknown>();
+  readonly caches: Caches;
 
   constructor(
     readonly root: unknown,
@@ -54,7 +60,9 @@ export class Scope {
     readonly index = 0,
     readonly size = 0,
     readonly now: Date = parent?.now ?? new Date()
-  ) {}
+  ) {
+    this.caches = parent?.caches ?? new Caches();
+  }
 
   /** A root scope carrying a fixed `$nowUTC`. */
   static withNow(data: unknown, now: Date): Scope {
@@ -83,7 +91,7 @@ export class Scope {
   }
 
   lookup(path: string): unknown {
-    const segs = segments(path);
+    const segs = segments(this.caches, path);
     const first = segs[0];
     if (typeof first === "number" || first === undefined) {
       return undefined;
@@ -484,12 +492,12 @@ class Parser {
     }
     const dot = path.lastIndexOf(".");
     const method = dot === -1 ? undefined : path.slice(dot + 1);
-    if (method !== undefined && Object.hasOwn(METHODS, method)) {
+    if (method !== undefined && (method === "length" || Object.hasOwn(METHODS, method))) {
       const target = path.slice(0, dot);
       return (s) => {
         const value = s.lookup(target);
         if (Array.isArray(value) || typeof value === "string") {
-          return METHODS[method]!(value);
+          return (METHODS[method] ?? sizeOf)(value);
         }
         return s.lookup(path);
       };
@@ -498,10 +506,9 @@ class Parser {
   }
 }
 
-const compiled = new Map<string, Node>();
-
 export function evaluate(expr: string, scope: Scope): unknown {
   const src = stripBraces(expr);
+  const compiled = scope.caches.compiled;
   let node = compiled.get(src);
   if (!node) {
     const tokens = tokenize(src);

@@ -40,8 +40,16 @@ export function decodeEntities(s: string): string {
   });
 }
 
+/** Characters XML 1.0 cannot carry: C0 controls other than tab, LF and CR, lone surrogates, U+FFFE and U+FFFF. */
+// biome-ignore lint/suspicious/noControlCharactersInRegex: the point is to match control characters
+const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+export function stripIllegalXml(s: string): string {
+  return s.replace(XML_ILLEGAL, "");
+}
+
 export function encodeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return stripIllegalXml(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export function makeEl(name: string, open: string, children: XNode[] = [], selfClose = false): XEl {
@@ -188,14 +196,20 @@ export function serializeXml(doc: XEl): string {
   return out.join("");
 }
 
-/** Deep copy; elements removed from the source are not copied. */
-export function cloneEl(el: XEl, parent: XEl | null = null): XEl {
+/** Deep copy; elements removed from the source are not copied. `tally` counts every node copied. */
+export function cloneEl(el: XEl, parent: XEl | null = null, tally?: { n: number }): XEl {
+  if (tally) {
+    tally.n++;
+  }
   const copy: XEl = { ...el, children: [], parent, cache: undefined, dead: false, rest: undefined };
   for (const c of el.children) {
     if (c.kind === "text") {
+      if (tally) {
+        tally.n++;
+      }
       copy.children.push(c);
     } else if (!c.dead) {
-      copy.children.push(cloneEl(c, copy));
+      copy.children.push(cloneEl(c, copy, tally));
     }
   }
   return copy;

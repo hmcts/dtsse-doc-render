@@ -1,8 +1,37 @@
-import { ExpressionError, evaluate, formatValue, type Instruction, repeatItems, type Scope, truthy } from "./expr.ts";
+import { ExpressionError, LimitError } from "./errors.ts";
+import { evaluate, formatValue, type Instruction, repeatItems, type Scope, truthy } from "./expr.ts";
+import { type Limits, resolveLimits } from "./limits.ts";
 import { type Found, hasContent, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
-import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, type XEl, type XNode } from "./xml.ts";
+import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, stripIllegalXml, type XEl, type XNode } from "./xml.ts";
+
+/** What one merge has produced so far, checked against the limits as it goes. */
+export interface Budget {
+  limits: Limits;
+  nodes: number;
+  bytes: number;
+}
+
+function spend(ctx: Ctx, nodes: number, bytes: number): void {
+  const b = ctx.budget;
+  b.nodes += nodes;
+  b.bytes += bytes;
+  if (b.nodes > b.limits.maxOutputNodes) {
+    throw new LimitError(`the merge would produce more than ${b.limits.maxOutputNodes} nodes; repeat blocks are expanding too far`);
+  }
+  if (b.bytes > b.limits.maxOutputBytes) {
+    throw new LimitError(`the merge would produce more than ${Math.round(b.limits.maxOutputBytes / 1048576)} MiB of output`);
+  }
+}
+
+function cloneIn(ctx: Ctx, el: XEl): XEl {
+  const tally = { n: 0 };
+  const copy = cloneEl(el, null, tally);
+  spend(ctx, tally.n, 0);
+  return copy;
+}
 
 export interface Ctx {
+  budget: Budget;
   devMode: boolean;
   messages: string[];
   part: string;
@@ -170,11 +199,17 @@ function planBlock<N>(block: TBlock<N>, scope: Scope, ctx: Ctx): Plan<N> {
     const ins = block.head.ins;
     const value = ins.kind === "rs" || ins.kind === "rr" ? evaluate(ins.expr, scope) : undefined;
     const list = repeatItems(value);
+    if (list.length > ctx.budget.limits.maxRepeatItems) {
+      throw new LimitError(`${block.head.loc}: a repeat block has ${list.length} items, more than the limit of ${ctx.budget.limits.maxRepeatItems}`);
+    }
     return {
       runs: list.map((item, i) => ({ items: block.branches[0]!.items, scope: scope.child(item, i + 1, list.length) })),
       taken: list.length > 0 ? 0 : -1
     };
   } catch (e) {
+    if (e instanceof LimitError) {
+      throw e;
+    }
     const reason = e instanceof ExpressionError || e instanceof Error ? e.message : String(e);
     const condition = block.head.text.replace(/^(?:cs|cr|rs|rr)_\s*/, "").replace(/^\{([\s\S]*)\}$/, "$1");
     return { runs: [], taken: -1, error: fail(ctx, `Error in expression:${reason}`, condition, block.head.loc, false) };
@@ -382,9 +417,10 @@ function renderFragment(
           pageBreak = true;
           continue;
         }
-        const raw = formatValue(evaluate(ins.expr, scope));
+        const raw = cleanValue(formatValue(evaluate(ins.expr, scope)));
         const html = (ins as { html?: boolean }).html === true;
         const value = html ? htmlToText(raw) : raw;
+        spend(ctx, 0, value.length);
         if (html && WHOLE_PARA(para, f)) {
           bare = true;
         }
@@ -413,6 +449,9 @@ function renderFragment(
         carry = false;
       }
     } catch (e) {
+      if (e instanceof LimitError) {
+        throw e;
+      }
       failAt(
         f,
         `Unable to evaluate field expression [${straighten(f.body.trim().replace(/^\{([\s\S]*)\}$/, "$1"))}]:${e instanceof Error ? e.message : String(e)}`
@@ -467,7 +506,7 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
     const sameEpoch = out.lastOrigin === key;
     const ordered = out.lastFrag?.origin === entry.origin && out.lastFrag.idx < entry.idx;
     const joined = entry.cont && out.last !== null && (sameEpoch || ordered || out.pendingJoin === entry.origin);
-    const source = clone ? cloneEl(entry.el) : entry.el;
+    const source = clone ? cloneIn(ctx, entry.el) : entry.el;
     if (entry.cont && !joined && !entry.keep && paraOf(source).text.trim() === "") {
       return;
     }
@@ -518,7 +557,7 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
     pushNode(out, node);
     return;
   }
-  const el = clone ? cloneEl(node) : node;
+  const el = clone ? cloneIn(ctx, node) : node;
   if (entry.k === "table") {
     const t = processTable(el, scope, ctx);
     if (t) {
@@ -747,9 +786,9 @@ function emitRows(items: TItem<RowEntry>[], scope: Scope, out: XNode[], clone: b
     if (it.t === "node") {
       const e = it.node;
       if (e.k === "other") {
-        out.push(clone && e.node.kind === "el" ? cloneEl(e.node) : e.node);
+        out.push(clone && e.node.kind === "el" ? cloneIn(ctx, e.node) : e.node);
       } else {
-        out.push(processRow(clone ? cloneEl(e.el) : e.el, scope, ctx));
+        out.push(processRow(clone ? cloneIn(ctx, e.el) : e.el, scope, ctx));
       }
       continue;
     }
@@ -1046,14 +1085,22 @@ function endWithParagraph(body: XEl): void {
   }
 }
 
-export function renderPart(xml: string, part: string, scope: Scope, devMode: boolean, messages: string[], counter: { n: number } = { n: 0 }): string {
+export function renderPart(
+  xml: string,
+  part: string,
+  scope: Scope,
+  devMode: boolean,
+  messages: string[],
+  counter: { n: number } = { n: 0 },
+  budget: Budget = { limits: resolveLimits(), nodes: 0, bytes: 0 }
+): string {
   const doc = parseXml(xml);
   const root = childEls(doc)[0];
   if (!root) {
     return xml;
   }
   const container = root.name === "w:document" ? (childEls(root, "w:body")[0] ?? root) : root;
-  const ctx: Ctx = { devMode, messages, part, epoch: 0, counter, body: part === "word/document.xml" };
+  const ctx: Ctx = { budget, devMode, messages, part, epoch: 0, counter, body: part === "word/document.xml" };
   const issues = analyse(container, ctx);
   if (issues.length > 0) {
     reportIssues(issues, ctx);
@@ -1063,5 +1110,14 @@ export function renderPart(xml: string, part: string, scope: Scope, devMode: boo
   if (container.name === "w:body") {
     endWithParagraph(container);
   }
-  return serializeXml(doc);
+  const out = serializeXml(doc);
+  if (out.length > budget.limits.maxOutputBytes) {
+    throw new LimitError(`${part} would be larger than ${Math.round(budget.limits.maxOutputBytes / 1048576)} MiB merged`);
+  }
+  return out;
+}
+
+/** Docmosis drops characters XML cannot carry (including `\v` and `\f`) from a value, and a run of tabs becomes one space. */
+function cleanValue(value: string): string {
+  return stripIllegalXml(value).replace(/\t+/g, " ");
 }
