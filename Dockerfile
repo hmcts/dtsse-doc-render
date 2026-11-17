@@ -1,3 +1,7 @@
+ARG DOCMOSIS_IMAGE=hmctsprod.azurecr.io/docmosis/docmosis-unified@sha256:8f4ff62abec8b16e8092ffbdebe2ab8ef0ff0867f816f92b8d020395575cb53d
+
+FROM ${DOCMOSIS_IMAGE} AS docmosis
+
 FROM hmctsprod.azurecr.io/base/node:24-alpine AS base
 
 USER root
@@ -28,14 +32,14 @@ RUN yarn workspaces focus --production
 
 FROM base AS fonts
 
-# The font set of the hmcts/rdo-docmosis image, so that fonts, and with them line breaks and page counts, match the
-# licensed renderer. Book Antiqua is a commercial Monotype font and is not in this public repository, so it is off by
-# default; INSTALL_BOOK_ANTIQUA=true expects docker/fonts/BKANT.TTF to be supplied at build time.
-ARG INSTALL_BOOK_ANTIQUA=false
+# The font set of the Docmosis image, so that fonts, and with them line breaks and page counts, match the licensed
+# renderer. Book Antiqua is a commercial Monotype font, so it is copied from the private Docmosis image at build time
+# and never stored in this public repository; install-fonts.sh fails the build if its sha256 changes.
 USER root
 RUN apk add --no-cache curl cabextract libarchive-tools
 COPY docker/fonts /docker-fonts
-RUN INSTALL_BOOK_ANTIQUA=${INSTALL_BOOK_ANTIQUA} /docker-fonts/install-fonts.sh /out
+COPY --from=docmosis /usr/share/fonts/truetype/openoffice/BKANT.TTF /out/usr/share/fonts/truetype/openoffice/BKANT.TTF
+RUN /docker-fonts/install-fonts.sh /out
 
 FROM base AS runtime
 

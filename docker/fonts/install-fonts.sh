@@ -3,12 +3,12 @@
 # directory. Every download is pinned in sources.sha256 and every installed font is checked against fonts.sha256,
 # which was taken from the running Docmosis image, so a changed upstream file fails the build.
 #
-# INSTALL_BOOK_ANTIQUA=false leaves out the vendored Book Antiqua file.
+# Book Antiqua is not downloaded: the Dockerfile copies it from the Docmosis image into the output directory before
+# this script runs, and the checks below cover it like every other font.
 set -eu
 
 out=$1
 here=$(cd "$(dirname "$0")" && pwd)
-install_book_antiqua=${INSTALL_BOOK_ANTIQUA:-false}
 
 dl=$(mktemp -d)
 work=$(mktemp -d)
@@ -76,20 +76,10 @@ lofonts=$out/usr/lib/libreoffice/share/fonts/truetype
 mkdir -p "$lofonts"
 mv "$work"/lo/opt/libreoffice7.6/share/fonts/truetype/* "$lofonts/"
 
-# Book Antiqua is a Monotype commercial font that Docmosis ships from hmcts/rdo-docmosis.
-manifest=$work/fonts.sha256
-cp "$here/fonts.sha256" "$manifest"
-if [ "$install_book_antiqua" = true ]; then
-  mkdir -p "$out/usr/share/fonts/truetype/openoffice"
-  cp "$here/BKANT.TTF" "$out/usr/share/fonts/truetype/openoffice/BKANT.TTF"
-else
-  grep -v 'BKANT.TTF' "$here/fonts.sha256" > "$manifest"
-fi
-
 cd "$out"
-sha256sum -c "$manifest"
+sha256sum -c "$here/fonts.sha256"
 
 # sha256sum -c cannot see extra files, so compare the file lists as well.
 find usr/share/fonts usr/share/X11/fonts usr/lib/libreoffice/share/fonts -type f ! -name fonts.dir ! -name fonts.scale | sort > "$work/installed"
-sed 's/^[0-9a-f]*  //' "$manifest" | sort > "$work/expected"
+sed 's/^[0-9a-f]*  //' "$here/fonts.sha256" | sort > "$work/expected"
 diff "$work/expected" "$work/installed"

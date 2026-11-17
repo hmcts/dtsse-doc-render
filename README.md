@@ -77,7 +77,7 @@ The image carries the fonts of the Docmosis image (`hmcts/rdo-docmosis`, Fedora 
 
 `fc-match` returns the same file for every family in the template corpus as the Docmosis image does. To check, run `fc-match "<family>" file` in this container and in `docmosis-local`.
 
-The one exception is Book Antiqua, a commercial Monotype font that this public repository does not include. Templates that ask for it fall back to another serif face. To match Docmosis there too, put `BKANT.TTF` in `docker/fonts/` (it is gitignored) and build with `--build-arg INSTALL_BOOK_ANTIQUA=true`.
+Book Antiqua, a commercial Monotype font that must not be committed here, is copied at build time from the private `hmctsprod.azurecr.io/docmosis/docmosis-unified` image, pinned by digest in the `DOCMOSIS_IMAGE` build arg, and checked against `fonts.sha256`. Local builds need `az acr login --name hmctsprod` first. `docker/fonts/BKANT.TTF` stays gitignored so a copy is never committed.
 
 ## Run it locally
 
