@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { createHandler } from "./app.ts";
-import { converterReady, convertToPdf } from "./convert.ts";
+import { type ConvertTarget, converterReady, convertTo, convertToPdf } from "./convert.ts";
 import { mergeDocx } from "./merge/index.ts";
 
 const port = Number(process.env.PORT ?? 8080);
@@ -8,6 +8,7 @@ const port = Number(process.env.PORT ?? 8080);
 const handler = createHandler({
   merge: mergeDocx,
   convert: convertToPdf,
+  convertTo: (document, sourceExtension, targetFormat) => convertTo(document, sourceExtension, targetFormat as ConvertTarget),
   ready: converterReady
 });
 
