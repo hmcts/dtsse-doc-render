@@ -40,7 +40,7 @@ describe("formatDate", () => {
   });
 
   it("rejects illegal and unterminated patterns", () => {
-    expect(() => formatDate(d, "yyyy w")).toThrow(/Illegal pattern character 'w'/);
+    expect(() => formatDate(d, "yyyy w")).toThrow('The date format "yyyy w" can not be applied as a format pattern');
     expect(() => formatDate(d, "yyyy 'abc")).toThrow(/Unterminated quote/);
   });
 
@@ -115,10 +115,23 @@ describe("dateFormat", () => {
     expect(dateFormat("2026-11-16", "dd MMM yyyy", "yyyy-MM-dd")).toBe("16 Nov 2026");
   });
 
-  it("accepts an ISO string and an epoch number without an input pattern", () => {
-    expect(dateFormat("2026-11-16T14:05:00.000", "HH:mm")).toBe("14:05");
-    expect(dateFormat("2026-11-16", "d MMM yyyy")).toBe("16 Nov 2026");
+  it("Docmosis: 2-arg dateFormat parses only the default input formats", () => {
+    expect(dateFormat("05 Mar 2024", "yyyy")).toBe("2024");
+    expect(dateFormat("2024-03-05T10:20:30Z", "yyyy")).toBe("2024");
+    expect(dateFormat("Tue Mar 05 10:20:30 UTC 2024", "yyyy")).toBe("2024");
+    expect(dateFormat("05-Mar-2024", "yyyy")).toBe("2024");
+    expect(() => dateFormat("2026-11-16", "d MMM yyyy")).toThrow('Cannot parse date:value="2026-11-16" formats applied=["EEE MMM dd HH:mm:ss zzz yyyy"');
+    expect(() => dateFormat("05/03/2024", "yyyy")).toThrow("Cannot parse date");
     expect(dateFormat(Date.UTC(2026, 10, 16), "d MMM yyyy")).toBe("16 Nov 2026");
+  });
+
+  it("Docmosis: 1-arg dateFormat uses dd MMM yyyy", () => {
+    expect(dateFormat(new Date(Date.UTC(2026, 10, 17)))).toBe("17 Nov 2026");
+  });
+
+  it("Docmosis: curly single quotes in a pattern are literal quotes", () => {
+    expect(dateFormat("2024-03-05", "yyyy-MM-dd’T’HH:mm:ss.000", "yyyy-MM-dd")).toBe("2024-03-05T00:00:00.000");
+    expect(dateFormat("2024-03-05", "dd/MM/yyyy ‘at’ HH:mm", "yyyy-MM-dd")).toBe("05/03/2024 at 00:00");
   });
 
   it("returns an empty string for a blank value", () => {
@@ -128,8 +141,10 @@ describe("dateFormat", () => {
   });
 
   it("throws the Docmosis message for an unparseable value", () => {
-    expect(() => dateFormat("garbage", "yyyy", "yyyy-MM-dd")).toThrow('dateFormat() Cannot parse date: value="garbage"');
-    expect(() => dateFormat("garbage", "yyyy")).toThrow('dateFormat() Cannot parse date: value="garbage"');
+    expect(() => dateFormat("garbage", "yyyy", "yyyy-MM-dd")).toThrow('dateFormat() Cannot parse date:value="garbage" formats applied=["yyyy-MM-dd"]');
+    expect(() => dateFormat("garbage", "yyyy", "")).toThrow('formats applied=[""]');
+    expect(() => dateFormat("garbage", "yyyy", null)).toThrow(/formats applied=\["EEE MMM dd HH:mm:ss zzz yyyy"/);
+    expect(() => dateFormat("garbage", "yyyy")).toThrow('dateFormat() Cannot parse date:value="garbage"');
     expect(() => dateFormat(new Date(Number.NaN), "yyyy")).toThrow("Cannot parse date");
   });
 

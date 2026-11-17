@@ -1,36 +1,24 @@
 import { dateFormat } from "./dates.ts";
 import { ExpressionError } from "./errors.ts";
-import { formatValue, isNumeric, toNumber } from "./values.ts";
+import { Decimal, formatValue, isCollection, isNumeric, scalar, toDecimal, toNumber } from "./values.ts";
 
 type Fn = (...args: unknown[]) => unknown;
 
 const isNil = (v: unknown) => v === undefined || v === null;
 
 export function isBlank(value: unknown): boolean {
-  if (isNil(value)) {
-    return true;
-  }
-  if (Array.isArray(value)) {
-    return value.length === 0;
-  }
-  return formatValue(value).trim() === "";
+  return isNil(value) || isCollection(value) || formatValue(value).trim() === "";
 }
 
 export function sizeOf(value: unknown): number {
-  if (isNil(value)) {
-    return 0;
-  }
-  if (Array.isArray(value) || typeof value === "string") {
+  if (Array.isArray(value)) {
     return value.length;
   }
-  if (typeof value === "object") {
-    return Object.keys(value).length;
-  }
-  return 1;
+  return isCollection(value) ? 1 : 0;
 }
 
 export function isEmpty(value: unknown): boolean {
-  return sizeOf(value) === 0;
+  return Array.isArray(value) ? value.length === 0 : !isCollection(value);
 }
 
 function numberArg(name: string, value: unknown): number | undefined {
@@ -43,11 +31,13 @@ function numberArg(name: string, value: unknown): number | undefined {
   return toNumber(value);
 }
 
-/** Java Math.round: half-up toward positive infinity. */
+/** Rounds half away from zero, as Docmosis does: round(-2.5) is -3. */
 export function round(value: unknown): number | undefined {
   const n = numberArg("round", value);
-  return n === undefined ? undefined : Math.round(n);
+  return n === undefined ? undefined : Math.sign(n) * Math.round(Math.abs(n));
 }
+
+const decimal = (n: number): Decimal => Decimal.fromNumber(n)!;
 
 export function titleCase(value: unknown): string {
   return formatValue(value)
@@ -117,39 +107,157 @@ export function numFormat(value: unknown, pattern: unknown): string | undefined 
   return `${negative ? "-" : ""}${prefix}${intDigits}${frac ? `.${frac}` : ""}${suffix}`;
 }
 
-function arity(name: string, args: unknown[], min: number, max = min): void {
-  if (args.length < min || args.length > max) {
-    const expected = min === max ? String(min) : `${min} to ${max}`;
-    throw new ExpressionError(`${name}() takes ${expected} argument(s) but was given ${args.length}`);
+const text = (v: unknown): string | null => (isNil(v) ? null : formatValue(v));
+
+function required(name: string, v: unknown): string {
+  if (isNil(v)) {
+    throw new ExpressionError(`${name}() requires a value`);
+  }
+  return formatValue(v);
+}
+
+function integer(name: string, v: unknown): number {
+  const n = numberArg(name, v);
+  if (n === undefined) {
+    throw new ExpressionError(`${name}() requires a number`);
+  }
+  return Math.trunc(n);
+}
+
+export function toSentence(value: unknown): string | null {
+  const t = text(value);
+  return t === null ? null : t.replace(/(^|[.!?]\s+)(\S)/g, (_, lead: string, ch: string) => lead + ch.toUpperCase());
+}
+
+export function substring(value: unknown, start: unknown, end: unknown): string | null {
+  const t = text(value);
+  if (t === null) {
+    return null;
+  }
+  const from = integer("substring", start);
+  const to = Math.min(integer("substring", end), t.length);
+  if (from < 0 || from > to) {
+    throw new ExpressionError(`substring() invalid range ${from} to ${to} for a value of length ${t.length}`);
+  }
+  return t.slice(from, to);
+}
+
+export function splitAt(value: unknown, separator: unknown, index: unknown): string | null {
+  const t = text(value);
+  if (t === null) {
+    return null;
+  }
+  return t.split(required("split", separator))[integer("split", index)] ?? null;
+}
+
+export function mapValue(ignoreCase: boolean, value: unknown, rest: unknown[]): unknown {
+  const fold = (v: unknown) => (ignoreCase ? formatValue(v).toLowerCase() : formatValue(v));
+  const same = (a: unknown, b: unknown) => (isNumeric(a) && isNumeric(b) ? toDecimal(a)!.compare(toDecimal(b)!) === 0 : fold(a) === fold(b));
+  const fallback = rest.length % 2 === 1 ? rest[rest.length - 1] : null;
+  if (isNil(value)) {
+    return fallback;
+  }
+  for (let i = 0; i + 1 < rest.length; i += 2) {
+    if (same(rest[i], value)) {
+      return rest[i + 1];
+    }
+  }
+  return fallback;
+}
+
+export function indexOf(name: string, value: unknown, sub: unknown, from: unknown, last: boolean): Decimal {
+  if (isNil(sub)) {
+    throw new ExpressionError(`${name}() Second argument cannot be null`);
+  }
+  const t = text(value);
+  if (t === null) {
+    return decimal(-1);
+  }
+  const needle = formatValue(sub);
+  const start = from === undefined ? undefined : integer(name, from);
+  return decimal(last ? t.lastIndexOf(needle, start) : t.indexOf(needle, start));
+}
+
+export function absolute(value: unknown): Decimal {
+  const d = isNil(value) ? undefined : toDecimal(value);
+  if (!d) {
+    throw new ExpressionError("abs() Invalid argument.");
+  }
+  return d.abs();
+}
+
+export function concat(args: unknown[]): string {
+  if (args.length !== 2 || isNil(args[0]) || isNil(args[1])) {
+    throw new ExpressionError("concat() Two string arguments are required.");
+  }
+  return formatValue(args[0]) + formatValue(args[1]);
+}
+
+function arity(name: string, args: unknown[], min: number): void {
+  if (args.length < min) {
+    throw new ExpressionError(`${name}() takes at least ${min} argument(s) but was given ${args.length}`);
   }
 }
 
 const define =
-  (name: string, min: number, max: number, f: Fn): Fn =>
+  (name: string, min: number, f: Fn): Fn =>
   (...args) => {
-    arity(name, args, min, max);
+    arity(name, args, min);
     return f(...args);
   };
 
 const FUNCTIONS: Record<string, Fn> = {
-  isBlank: define("isBlank", 1, 1, (v) => isBlank(v)),
-  ifBlank: define("ifBlank", 2, 2, (v, alt) => (isBlank(v) ? alt : v)),
-  round: define("round", 1, 1, (v) => round(v)),
-  toLowerCase: define("toLowerCase", 1, 1, (v) => formatValue(v).toLowerCase()),
-  toUpperCase: define("toUpperCase", 1, 1, (v) => formatValue(v).toUpperCase()),
-  titleCase: define("titleCase", 1, 1, (v) => titleCase(v)),
-  equalsIgnoreCase: define("equalsIgnoreCase", 2, 2, (a, b) => equalsIgnoreCase(a, b)),
-  numFormat: define("numFormat", 2, 2, (v, p) => numFormat(v, p)),
-  dateFormat: define("dateFormat", 2, 3, (v, out, inPattern) => dateFormat(v, out, inPattern))
+  isBlank: define("isBlank", 1, (v) => isBlank(v)),
+  ifBlank: define("ifBlank", 2, (v, alt) => (isBlank(v) ? alt : v)),
+  round: define("round", 1, (v) => round(v)),
+  toLowerCase: define("toLowerCase", 1, (v) => formatValue(v).toLowerCase()),
+  toUpperCase: define("toUpperCase", 1, (v) => formatValue(v).toUpperCase()),
+  titleCase: define("titleCase", 1, (v) => titleCase(v)),
+  equalsIgnoreCase: define("equalsIgnoreCase", 2, (a, b) => equalsIgnoreCase(a, b)),
+  numFormat: define("numFormat", 2, (v, p) => numFormat(v, p)),
+  dateFormat: define("dateFormat", 1, (...args) => {
+    if (args.length > 7) {
+      throw new ExpressionError("dateFormat() requires 1 to 7 parameters");
+    }
+    return dateFormat(...(args as Parameters<typeof dateFormat>));
+  }),
+  trim: define("trim", 1, (v) => text(v)?.trim() ?? null),
+  substring: define("substring", 3, (v, a, b) => substring(v, a, b)),
+  length: define("length", 1, (v) => (typeof v === "boolean" ? fail("length() cannot measure a boolean") : decimal(text(v)?.length ?? 0))),
+  indexOf: define("indexOf", 2, (v, sub, from) => indexOf("indexOf", v, sub, from, false)),
+  lastIndexOf: define("lastIndexOf", 2, (v, sub, from) => indexOf("lastIndexOf", v, sub, from, true)),
+  abs: define("abs", 1, (v) => absolute(v)),
+  concat: (...args) => concat(args),
+  numberLiteral: define("numberLiteral", 1, (v) => Number(v)),
+  toSentence: define("toSentence", 1, (v) => toSentence(v)),
+  startsWith: define("startsWith", 2, (v, p) => (isNil(v) ? false : formatValue(v).startsWith(required("startsWith", p)))),
+  endsWith: define("endsWith", 2, (v, p) => (isNil(v) ? false : formatValue(v).endsWith(required("endsWith", p)))),
+  split: define("split", 3, (v, sep, i) => splitAt(v, sep, i)),
+  replaceStr: define(
+    "replaceStr",
+    3,
+    (v, from, to) =>
+      text(v)
+        ?.split(required("replaceStr", from))
+        .join(text(to) ?? "") ?? null
+  ),
+  map: define("map", 3, (v, ...rest) => mapValue(false, v, rest)),
+  mapi: define("mapi", 3, (v, ...rest) => mapValue(true, v, rest)),
+  squote: define("squote", 1, (v) => text(v)?.replace(/["“”]/g, "'") ?? null)
 };
+
+function fail(message: string): never {
+  throw new ExpressionError(message);
+}
 
 export function hasFunction(name: string): boolean {
   return Object.hasOwn(FUNCTIONS, name);
 }
 
+/** Unknown functions yield null, and arguments beyond a function's own are ignored. */
 export function callFunction(name: string, args: unknown[]): unknown {
   if (!hasFunction(name)) {
-    throw new ExpressionError(`Unknown function ${name}()`);
+    return null;
   }
-  return FUNCTIONS[name]!(...args);
+  return FUNCTIONS[name]!(...args.map(scalar));
 }

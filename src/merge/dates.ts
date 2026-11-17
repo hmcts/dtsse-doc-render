@@ -1,8 +1,109 @@
 import { ExpressionError } from "./errors.ts";
+import { formatValue } from "./values.ts";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const PATTERN_LETTERS = "GyYMLDdEuaHkKhmsSzZX";
+
+interface Names {
+  months: string[];
+  monthsShort: string[];
+  days: string[];
+  daysShort: string[];
+  am: string;
+  pm: string;
+  standaloneMonths?: string[];
+  standaloneMonthsShort?: string[];
+}
+
+const ENGLISH: Names = {
+  months: MONTHS,
+  monthsShort: MONTHS.map((m) => m.slice(0, 3)),
+  days: DAYS,
+  daysShort: DAYS.map((d) => d.slice(0, 3)),
+  am: "AM",
+  pm: "PM"
+};
+
+const WELSH: Names = {
+  months: ["Ionawr", "Chwefror", "Mawrth", "Ebrill", "Mai", "Mehefin", "Gorffennaf", "Awst", "Medi", "Hydref", "Tachwedd", "Rhagfyr"],
+  monthsShort: ["Ion", "Chwef", "Maw", "Ebrill", "Mai", "Meh", "Gorff", "Awst", "Medi", "Hyd", "Tach", "Rhag"],
+  days: ["Dydd Sul", "Dydd Llun", "Dydd Mawrth", "Dydd Mercher", "Dydd Iau", "Dydd Gwener", "Dydd Sadwrn"],
+  daysShort: ["Sul", "Llun", "Maw", "Mer", "Iau", "Gwen", "Sad"],
+  am: "yb",
+  pm: "yh"
+};
+
+const languageNames = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
+const regionNames = new Intl.DisplayNames(["en"], { type: "region", fallback: "none" });
+
+function intlNames(tag: string): Names {
+  const at = (options: Intl.DateTimeFormatOptions, date: Date, type: string) =>
+    new Intl.DateTimeFormat(tag, { ...options, timeZone: "UTC" }).formatToParts(date).find((p) => p.type === type)?.value ?? "";
+  const month = (m: number, style: "long" | "short") => at({ day: "numeric", month: style }, new Date(Date.UTC(2024, m, 1)), "month");
+  const day = (d: number, style: "long" | "short") => at({ weekday: style }, new Date(Date.UTC(2024, 0, 7 + d)), "weekday");
+  const range = (n: number) => Array.from({ length: n }, (_, i) => i);
+  const standalone = (m: number, style: "long" | "short") => at({ month: style, year: "numeric" }, new Date(Date.UTC(2024, m, 1)), "month");
+  return {
+    months: range(12).map((m) => month(m, "long")),
+    monthsShort: range(12).map((m) => month(m, "short")),
+    standaloneMonths: range(12).map((m) => standalone(m, "long")),
+    standaloneMonthsShort: range(12).map((m) => standalone(m, "short")),
+    days: range(7).map((d) => day(d, "long")),
+    daysShort: range(7).map((d) => day(d, "short")),
+    am: ENGLISH.am,
+    pm: ENGLISH.pm
+  };
+}
+
+const GREEK_STANDALONE_SHORT = ["Ιαν", "Φεβ", "Μάρ", "Απρ", "Μάι", "Ιούν", "Ιούλ", "Αύγ", "Σεπ", "Οκτ", "Νοέ", "Δεκ"];
+
+const GREEK_NAMES = (): Names => ({ ...intlNames("el"), standaloneMonthsShort: GREEK_STANDALONE_SHORT, am: "π.μ.", pm: "μ.μ." });
+
+const namesCache = new Map<string, Names>();
+
+/**
+ * The Docmosis locale argument: a language (en, fr) with an optional _REGION. Docmosis reads a bare "cy" as the region
+ * Cyprus, so it gets Greek names, while cy_GB gets Welsh. English and any other language the platform knows about use
+ * their own names. Anything else is rejected.
+ */
+export function localeNames(locale: unknown): Names {
+  if (locale === undefined || locale === null) {
+    return ENGLISH;
+  }
+  const text = formatValue(locale);
+  const m = /^([A-Za-z]{2,3})(?:_([A-Za-z]{2}))?$/.exec(text);
+  const language = m?.[1]?.toLowerCase();
+  const region = m?.[2]?.toUpperCase();
+  if (
+    !language ||
+    (language === "cy" && region !== undefined && region !== "GB") ||
+    languageNames.of(language) === undefined ||
+    (region !== undefined && (regionNames.of(region) ?? "Unknown Region") === "Unknown Region")
+  ) {
+    throw new ExpressionError(`dateFormat() The given locale "${formatValue(locale)}" is invalid`);
+  }
+  if (language === "en") {
+    return ENGLISH;
+  }
+  if (language === "cy" && region !== undefined) {
+    return WELSH;
+  }
+  if (language === "cy") {
+    let greek = namesCache.get("cy");
+    if (!greek) {
+      greek = GREEK_NAMES();
+      namesCache.set("cy", greek);
+    }
+    return greek;
+  }
+  let names = namesCache.get(language);
+  if (!names) {
+    names = intlNames(language);
+    namesCache.set(language, names);
+  }
+  return names;
+}
 
 type Part = { lit: string } | { ch: string; n: number };
 
@@ -48,7 +149,7 @@ function compile(pattern: string): Part[] {
     }
     if (/[A-Za-z]/.test(c)) {
       if (!PATTERN_LETTERS.includes(c)) {
-        throw new ExpressionError(`dateFormat() Illegal pattern character '${c}' in "${pattern}"`);
+        throw new ExpressionError(`dateFormat() The date format "${pattern}" can not be applied as a format pattern`);
       }
       let n = 1;
       while (pattern[i + n] === c) {
@@ -71,9 +172,11 @@ function dayOfYear(d: Date): number {
 }
 
 /** Formats the wall-clock fields of `d`, read as UTC, with a Java SimpleDateFormat pattern in the English locale. */
-export function formatDate(d: Date, pattern: string): string {
+export function formatDate(d: Date, pattern: string, names: Names = ENGLISH): string {
   let out = "";
-  for (const part of compile(pattern)) {
+  const parts = compile(pattern);
+  const monthOnly = parts.every((p) => "lit" in p || p.ch === "M" || p.ch === "L");
+  for (const part of parts) {
     if ("lit" in part) {
       out += part.lit;
       continue;
@@ -90,7 +193,13 @@ export function formatDate(d: Date, pattern: string): string {
         break;
       case "M":
       case "L":
-        out += n >= 4 ? MONTHS[d.getUTCMonth()] : n === 3 ? MONTHS[d.getUTCMonth()]!.slice(0, 3) : pad(d.getUTCMonth() + 1, n);
+        if (n < 3) {
+          out += pad(d.getUTCMonth() + 1, n);
+        } else {
+          const alone = ch === "L" || monthOnly;
+          const list = n >= 4 ? (alone && names.standaloneMonths) || names.months : (alone && names.standaloneMonthsShort) || names.monthsShort;
+          out += list[d.getUTCMonth()];
+        }
         break;
       case "D":
         out += pad(dayOfYear(d), n);
@@ -99,13 +208,13 @@ export function formatDate(d: Date, pattern: string): string {
         out += pad(d.getUTCDate(), n);
         break;
       case "E":
-        out += n >= 4 ? DAYS[d.getUTCDay()] : DAYS[d.getUTCDay()]!.slice(0, 3);
+        out += n >= 4 ? names.days[d.getUTCDay()] : names.daysShort[d.getUTCDay()];
         break;
       case "u":
         out += pad(d.getUTCDay() === 0 ? 7 : d.getUTCDay(), n);
         break;
       case "a":
-        out += hour < 12 ? "AM" : "PM";
+        out += hour < 12 ? names.am : names.pm;
         break;
       case "H":
         out += pad(hour, n);
@@ -300,7 +409,29 @@ export function parseDate(input: string, pattern: string): Date | undefined {
   return date;
 }
 
-const ISO_FALLBACK = "yyyy-MM-dd'T'HH:mm:ss.SSS";
+const DEFAULT_INPUT_FORMATS = [
+  "EEE MMM dd HH:mm:ss zzz yyyy",
+  "yyyy-MM-dd'T'HH:mm:ss'Z'",
+  "dd MMM yyyy",
+  "dd-MMM-yyyy",
+  "dd/MMM/yyyy",
+  "dd MMM yy",
+  "dd-MMM-yy",
+  "dd/MMM/yy",
+  "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'"
+];
+
+const curlyToStraight = (pattern: string) => pattern.replace(/[‘’]/g, "'");
+
+function parseWithDefaults(text: string): Date | undefined {
+  for (const pattern of DEFAULT_INPUT_FORMATS) {
+    const date = parseDate(text, pattern);
+    if (date) {
+      return date;
+    }
+  }
+  return undefined;
+}
 
 function blank(value: unknown): boolean {
   return value === undefined || value === null || (typeof value === "string" && value.trim() === "");
@@ -310,13 +441,17 @@ function blank(value: unknown): boolean {
  * Docmosis dateFormat(value, out[, in]). Dates are wall-clock values: nothing is converted between time zones, and
  * `$nowUTC` is a Date formatted as UTC. A blank value formats to an empty string.
  */
-export function dateFormat(value: unknown, out: unknown, inPattern?: unknown): string {
+export function dateFormat(value: unknown, outArg: unknown = "dd MMM yyyy", inArg?: unknown, locale?: unknown, inLocale?: unknown): string {
   if (blank(value)) {
     return "";
   }
-  if (typeof out !== "string") {
+  const names = localeNames(locale);
+  localeNames(inLocale);
+  if (typeof outArg !== "string") {
     throw new ExpressionError("dateFormat() requires a format pattern string");
   }
+  const out = curlyToStraight(outArg);
+  const inPattern = typeof inArg === "string" ? curlyToStraight(inArg) : (inArg ?? undefined);
   let date: Date | undefined;
   if (value instanceof Date) {
     date = value;
@@ -325,18 +460,19 @@ export function dateFormat(value: unknown, out: unknown, inPattern?: unknown): s
   } else {
     const text = String(value);
     if (inPattern === undefined) {
-      date = parseDate(text, ISO_FALLBACK) ?? parseDate(text, "yyyy-MM-dd");
+      date = parseWithDefaults(text);
     } else if (typeof inPattern === "string") {
-      date = parseDate(text, inPattern);
+      date = inPattern === "" ? undefined : parseDate(text, inPattern);
     } else {
       throw new ExpressionError("dateFormat() requires an input pattern string");
     }
     if (!date) {
-      throw new ExpressionError(`dateFormat() Cannot parse date: value="${text}"`);
+      const applied = typeof inPattern === "string" ? [inPattern] : DEFAULT_INPUT_FORMATS;
+      throw new ExpressionError(`dateFormat() Cannot parse date:value="${text}" formats applied=[${applied.map((f) => `"${f}"`).join(",")}]`);
     }
   }
   if (Number.isNaN(date.getTime())) {
     throw new ExpressionError(`dateFormat() Cannot parse date: value="${String(value)}"`);
   }
-  return formatDate(date, out);
+  return formatDate(date, out, names);
 }

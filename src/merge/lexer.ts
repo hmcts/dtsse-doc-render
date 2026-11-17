@@ -1,10 +1,11 @@
 import { ExpressionError } from "./errors.ts";
 
-export type Token = { t: "num"; v: number } | { t: "str"; v: string } | { t: "path"; v: string } | { t: "op"; v: string };
+export type Token = { t: "num"; v: string } | { t: "str"; v: string } | { t: "path"; v: string } | { t: "op"; v: string; at: number };
 
-const QUOTES = "‘’“”'\"";
-const OPERATORS = ["==", "!=", "<=", ">=", "&&", "||", "=", "<", ">", "!", "+", "-", "(", ")", ","];
-const AFTER_STRING = ",)}&|=!<>+";
+const QUOTES = "‘’'";
+const NOT_DELIMITERS = '"“”';
+const OPERATORS = ["==", "!=", "<=", ">=", "&&", "||", "=", "<", ">", "!", "+", "-", "*", "/", "%", "(", ")", ","];
+const AFTER_STRING = ",)}&|=!<>+*/%";
 const IDENT_START = /[A-Za-z_$]/;
 const IDENT_PART = /[\w$]/;
 
@@ -32,6 +33,14 @@ function findClose(src: string, from: number): number {
   return firstQuote;
 }
 
+function rejectedQuote(src: string, at: number): ExpressionError {
+  if (src[at] === '"') {
+    return new ExpressionError("Expression is invalid.");
+  }
+  const term = /^[^\s,()=<>!&|+]+/.exec(src.slice(at))![0];
+  return new ExpressionError(`Field term "${term}" must start with an Alphabetic letter or $`);
+}
+
 export function tokenize(src: string): Token[] {
   const tokens: Token[] = [];
   let i = 0;
@@ -39,6 +48,8 @@ export function tokenize(src: string): Token[] {
     const c = src[i]!;
     if (/\s/.test(c)) {
       i++;
+    } else if (NOT_DELIMITERS.includes(c)) {
+      throw rejectedQuote(src, i);
     } else if (QUOTES.includes(c)) {
       const close = findClose(src, i + 1);
       if (close === -1) {
@@ -48,7 +59,7 @@ export function tokenize(src: string): Token[] {
       i = close + 1;
     } else if (/\d/.test(c)) {
       const m = /^\d+(\.\d+)?/.exec(src.slice(i))!;
-      tokens.push({ t: "num", v: Number(m[0]) });
+      tokens.push({ t: "num", v: m[0] });
       i += m[0].length;
     } else if (IDENT_START.test(c)) {
       let j = i + 1;
@@ -72,7 +83,7 @@ export function tokenize(src: string): Token[] {
       if (!op) {
         throw new ExpressionError(`Unexpected character '${c}' in expression: ${src}`);
       }
-      tokens.push({ t: "op", v: op });
+      tokens.push({ t: "op", v: op, at: i });
       i += op.length;
     }
   }
