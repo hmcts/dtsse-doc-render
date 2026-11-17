@@ -115,3 +115,22 @@ node test/parity/capture.mjs                 # rewrite expected files from Docmo
 ```
 
 `compare.mjs` prints `same` or `DIFF` per fixture and exits 1 on any difference. `templates.mjs` generates sample data for real templates, renders each on both with devMode on and writes the data, both texts and a diff to a directory it prints. Docmosis caches templates by file mtime, so every template copied into it gets a fresh name; the scripts do this themselves. Templates are sent to this service inline.
+
+### Visual parity
+
+`test/parity/visual.mjs` measures how close this service's PDFs look to a licensed Docmosis's. It needs the same two backends as above, plus Docker for a throwaway image (`dtsse-doc-render-visual`, built once from `test/parity/visual/Dockerfile`: Alpine, poppler-utils and ImageMagick). Files go in and out with `docker cp`, so a remote Docker daemon works.
+
+```
+node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base CV-PCS-CLM-ENG-Defence-Form --out /tmp/vis
+node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base --sample 120 --include names.txt --out /tmp/vis
+node test/parity/fonts.mjs <hmcts/docmosis>/Templates/Base --out /tmp/fonts.json
+```
+
+For each template it generates data (the generator is shared with `templates.mjs` in `datagen.mjs`), renders a PDF on both with devMode on, rasterises every page at 100 dpi and writes `summary.json` and `report.html` to `--out`, with the PDFs and page images under `work/<template>/`. `--sample N` draws a sample proportional by jurisdiction prefix (`CV-`, `FL-`, `TB-`, ...) and always includes the names in the `--include` file. `--jobs` sets render concurrency (default 3), `--reuse` re-analyses PDFs already in `--out` without rendering, and `VISUAL_FUZZ` the anti-alias colour tolerance (default 12%). Per template the summary has:
+
+- page counts on each side;
+- per-page mismatch, the percentage of pixels that differ beyond the tolerance, and the same as a share of inked pixels;
+- structural shift: text lines from `pdftotext -bbox-layout` matched by text, with the median and maximum horizontal and vertical offset in points, and how many lines moved to another page. A large shift with a low mismatch is content that moved; a high mismatch with no shift is a font or rendering difference;
+- the fonts embedded in each PDF (`pdffonts`) and the image count.
+
+`report.html` lists every template and shows the worst pages side by side with a diff image. A template that fails to render on either backend is listed under `failed` and not measured. `fonts.mjs` counts the font families the templates ask for (`fontTable.xml` and `w:rFonts`) and tabulates what `fc-match` picks in each container.
