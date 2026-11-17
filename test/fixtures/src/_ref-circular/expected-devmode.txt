@@ -1,0 +1,5 @@
+Before
+in a
+in b
+<<ref:ref-circular-a.docx>>Docmosis1
+After

@@ -1,0 +1,22 @@
+{
+  "party": {
+    "name": "Ms Smith",
+    "role": "Claimant"
+  },
+  "case": {
+    "number": "K1AB2345"
+  },
+  "court": "Leeds County Court",
+  "parties": [
+    {
+      "name": "Acme Ltd",
+      "role": "Defendant"
+    },
+    {
+      "name": "Mr Jones",
+      "role": "Defendant"
+    }
+  ],
+  "showFooter": true,
+  "hideFooter": false
+}

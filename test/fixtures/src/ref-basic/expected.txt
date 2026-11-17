@@ -1,0 +1,13 @@
+CLAIM K1AB2345
+Issued by Leeds County Court
+Dear Ms Smith,
+Before first included paragraph for Ms Smith
+second included paragraph after.
+Reference K1AB2345
+Signed: the Registrar
+Party: Acme Ltd (Defendant)
+Party: Mr Jones (Defendant)
+Footer for Leeds County Court
+Left | Party: ()
+Footer for Leeds County CourtFooter for Leeds County Court
+The end.

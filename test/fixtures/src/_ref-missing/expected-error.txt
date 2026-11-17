@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<ref:ref-missing-absent.docx>> Template Not found [ref-missing-absent.docx]  Suggestion 1:Make sure the template has been uploaded into the template store (using DropStoreHelper or StoreHelper)   Suggestion 2:Check the template name 

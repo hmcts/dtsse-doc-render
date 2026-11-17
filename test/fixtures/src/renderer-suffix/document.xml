@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Date: &lt;&lt;hearing{renderer=date('dd MMMM yyyy','yyyy-MM-dd')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Curly quotes: &lt;&lt;hearing{renderer=date(‘d MMM yyyy’, ‘yyyy-MM-dd’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Date and time: &lt;&lt;stamp{renderer=date('dd/MM/yyyy','yyyy-MM-dd')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Default input: &lt;&lt;issued{renderer=date('yyyy-MM-dd')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Blank date: [&lt;&lt;missing{renderer=date('dd MMMM yyyy','yyyy-MM-dd')}&gt;&gt;] [&lt;&lt;nothing{renderer=date('yyyy','yyyy-MM-dd')}&gt;&gt;] [&lt;&lt;empty{renderer=date('yyyy','yyyy-MM-dd')}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;op:missing{renderer=date('dd MMMM yyyy','yyyy-MM-dd')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">In a repeat: &lt;&lt;rs_dates&gt;&gt;&lt;&lt;$this{renderer=date('dd/MM/yy','yyyy-MM-dd')}&gt;&gt;; &lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Number: &lt;&lt;amount{renderer=number('#,##0.00')}&gt;&gt; &lt;&lt;amount{renderer=number('0')}&gt;&gt; &lt;&lt;amount{renderer=number('#.#')}&gt;&gt; &lt;&lt;amount{renderer=number}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Number text: &lt;&lt;amountText{renderer=number('#,##0.00')}&gt;&gt; &lt;&lt;amountText{renderer=number}&gt;&gt; &lt;&lt;padded{renderer=number}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Number pattern: &lt;&lt;amount{renderer=number('£#,##0.00')}&gt;&gt; &lt;&lt;ratio{renderer=number('0.0%')}&gt;&gt; &lt;&lt;small{renderer=number('')}&gt;&gt; &lt;&lt;amount{renderer=number('')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Blank number: [&lt;&lt;missing{renderer=number('0.0')}&gt;&gt;] [&lt;&lt;empty{renderer=number('0.0')}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Boolean: &lt;&lt;yes{renderer=boolean}&gt;&gt; &lt;&lt;no{renderer=boolean}&gt;&gt; &lt;&lt;yes{renderer=boolean('yesno')}&gt;&gt; &lt;&lt;no{renderer=boolean('yesno')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Boolean formats: &lt;&lt;yes{renderer=boolean('yn')}&gt;&gt;&lt;&lt;no{renderer=boolean('yn')}&gt;&gt; &lt;&lt;yes{renderer=boolean('yesnouc')}&gt;&gt; &lt;&lt;no{renderer=boolean('yesnolc')}&gt;&gt; &lt;&lt;yes{renderer=boolean('dingbats1')}&gt;&gt;&lt;&lt;no{renderer=boolean('dingbats2')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Boolean from text: &lt;&lt;flagText{renderer=boolean('yesno')}&gt;&gt; &lt;&lt;missing{renderer=boolean('yesno')}&gt;&gt; &lt;&lt;word{renderer=boolean('yesno')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Unknown renderer keeps the value: &lt;&lt;word{renderer=shout}&gt;&gt; &lt;&lt;word{renderer=upper('x')}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Not a string: &lt;&lt;$v=hearing&gt;&gt;&lt;&lt;$v{renderer=date('yyyy','yyyy-MM-dd')}&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

@@ -3,8 +3,11 @@ import { cloneEl, encodeText, makeEl, makeText, textOf, type XEl } from "./xml.t
 
 /** A paragraph break inserted by a value. A `\n` in an inserted value ends the paragraph; the next one copies the paragraph properties. */
 export const SPLIT = "dr:split";
+/** Inserted where an included template goes. XML cannot carry it, so no data value can forge one. */
+export const REF_BREAK = "\u0001";
+
 /** Inserted-value characters: `\n` ends the paragraph, `\v` is a line break, `\f` ends the paragraph and the next one has default properties. */
-const SEPARATOR = /(\r\n|\n|\r|\v|\f)/;
+const SEPARATOR = new RegExp(`(\\r\\n|\\n|\\r|\\v|\\f|${REF_BREAK})`);
 
 /** Stands in for a non-text run child (tab, break, drawing, field character) in a paragraph's joined text. */
 export const NODE_CHAR = "\uFFFC";
@@ -69,7 +72,7 @@ function collect(el: XEl, segs: Seg[], parts: string[], pos: { n: number }): voi
   }
 }
 
-/** Finds `<<…>>` in a paragraph's joined text. `<<## … ##>>` heading noise is skipped. */
+/** Finds `<<…>>` in a paragraph's joined text. `<<## … ##>>` is a comment, like a slash-star comment. */
 export function findInstructions(text: string): { found: Found[]; problems: string[] } {
   const found: Found[] = [];
   const problems: string[] = [];
@@ -77,6 +80,9 @@ export function findInstructions(text: string): { found: Found[]; problems: stri
   while (i >= 0) {
     if (text.startsWith("<<##", i)) {
       const j = text.indexOf("##>>", i + 4);
+      if (j >= 0) {
+        found.push({ start: i, end: j + 4, body: text.slice(i + 2, j + 2), ins: { kind: "comment" } });
+      }
       i = text.indexOf("<<", j >= 0 ? j + 4 : i + 2);
       continue;
     }
@@ -110,6 +116,9 @@ function setText(el: XEl, text: string): void {
 function separatorEl(sep: string): XEl {
   if (sep === "\v") {
     return makeEl("w:br", "<w:br/>", [], true);
+  }
+  if (sep === REF_BREAK) {
+    return makeEl(SPLIT, "<dr:split ref/>", [], true);
   }
   return makeEl(SPLIT, sep === "\f" ? "<dr:split plain/>" : "<dr:split/>", [], true);
 }
@@ -339,6 +348,7 @@ export function splitAtBreaks(p: XEl): XEl[] {
     }
     out.push(cur);
     cur = right!;
+    cur.refBreak = mark.open.includes(" ref");
   }
 }
 

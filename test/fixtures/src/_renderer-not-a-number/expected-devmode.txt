@@ -1,0 +1,3 @@
+Before
+<<word{renderer=number('0')}>>Docmosis1
+After

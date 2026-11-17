@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Host paragraph</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Highlight"/></w:pPr><w:r><w:t xml:space="preserve">Host styled</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">Host list item</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;ref:ref-resources-notice.docx&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Highlight"/></w:pPr><w:r><w:t xml:space="preserve">Host styled again</w:t></w:r></w:p>
+    <w:p><w:pPr><w:numPr><w:ilvl w:val="0"/><w:numId w:val="1"/></w:numPr></w:pPr><w:r><w:t xml:space="preserve">Host list item two</w:t></w:r></w:p>
+  </w:body>
+</w:document>

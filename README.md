@@ -26,7 +26,7 @@ Every `/rs/*` endpoint is also served under `/api/*`. Errors are `{"succeeded":f
 | `GET /health/readiness` | 200 `{"status":"UP"}`, or 503 `{"status":"DOWN"}` when LibreOffice is unavailable |
 | `GET /rs/status` | `{"ready":<LibreOffice available>,...}` |
 | `GET /rs/ping` | 200 |
-| `POST /rs/render` | JSON, form or multipart `{templateBase64 or templateFile, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx. `accessKey` is accepted and ignored |
+| `POST /rs/render` | JSON, form or multipart `{templateBase64 or templateFile, includes?, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx. `accessKey` is accepted and ignored |
 | `POST /rs/convert` | multipart `file`, `outputName`; returns a PDF |
 | `/api/getTemplateStructure`, `/api/getSampleData` | 501 |
 
@@ -62,6 +62,21 @@ curl -s localhost:8080/api/render -F templateFile=@T.docx -F 'data=@payload.json
 
 Render failures return HTTP 400 as Docmosis does, with the first problem in `shortMsg` and every problem in `longMsg`.
 
+### Send included templates with the request
+
+A template that calls `<<ref:Other.docx>>` or `<<refLookup:field>>` merges another template in at that point. Docmosis finds it in its store; this service has none, so the request carries every template it may name, under the name the tag uses:
+
+- JSON, or a form field: `includes` is an object of template name to base64 `.docx` (in a form field, the object as a JSON string).
+- Multipart: any number of file parts named `include`; each is named by its filename.
+- Both can be used in one request. At most 100 includes, each a zip. A name the tag asks for that was not sent fails as Docmosis's missing template does: `Template Not found [name]`, in devMode written into the document in place of the tag. Includes count against the same zip size limits as the template.
+
+```sh
+curl -s localhost:8080/api/render -F templateFile=@Letter.docx -F include=@Letter-Header.docx -F include=@Appeal-Heading.docx \
+  -F 'data=@payload.json;type=application/json' -F outputFormat=pdf -o out.pdf
+```
+
+`docs/template-language.md` says what an include keeps of the template it comes from, and what it cannot carry.
+
 ## Configuration
 
 | Variable | Default | Purpose |
@@ -73,7 +88,7 @@ Render failures return HTTP 400 as Docmosis does, with the first problem in `sho
 
 ## Fonts
 
-The image carries the fonts of the Docmosis image (`hmcts/rdo-docmosis`, Fedora 40), file for file, so that line breaks and page counts match: the Microsoft core fonts including Calibri, Cambria and Tahoma, Open Sans, GNU FreeFont, Cantarell, Noto Sans, Source Code Pro, the X11 Type1 fonts, and the fonts LibreOffice 7.6.7.2 bundles. There are no Alpine font packages. `docker/fonts/install-fonts.sh` downloads each source, `sources.sha256` pins them, and `fonts.sha256` lists every installed font as taken from the running Docmosis image. The build fails if either check does not pass. `docker/fonts/99-docmosis.conf` makes fontconfig scan the same directories as Docmosis.
+The image carries the fonts of the Docmosis image (`hmcts/rdo-docmosis`, Fedora 40), file for file, so that line breaks and page counts match: the Microsoft core fonts including Calibri, Cambria and Tahoma, Open Sans, GNU FreeFont, Cantarell, Noto Sans, Source Code Pro, the X11 Type1 fonts, and the fonts LibreOffice 7.6.7.2 bundles. There are no Alpine font packages. `docker/fonts/install-fonts.sh` downloads each source, `sources.sha256` pins them, and `fonts.sha256` lists every installed font as taken from the running Docmosis image. The build fails if either check does not pass. `docker/fonts/99-docmosis.conf` makes fontconfig scan the same directories as Docmosis, and names the substitute LibreOffice 7.6 picks for a family neither image has (Noto Sans, or Cantarell for Segoe UI, Arial for Helvetica and so on), because LibreOffice 25.8 ignores fontconfig's default fallback and would choose Noto Serif.
 
 `fc-match` returns the same file for every family in the template corpus as the Docmosis image does. To check, run `fc-match "<family>" file` in this container and in `docmosis-local`.
 
@@ -100,7 +115,8 @@ From inside another container use `http://host.docker.internal:8080`, or join th
 
 `TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance.
 
-The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header).
+The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header, and `styles.xml`, `numbering.xml`, `media/` and `rels.xml` (extra relationships) if it needs them).
+- A fixture whose template calls `ref:` or `refLookup:` keeps the templates it includes in `includes/<name>.docx/`, one directory per template laid out the same way. `build.mjs` writes them to `test/fixtures/<fixture>.includes/<name>.docx`, the functional suite and `compare.mjs` send them, and `capture.mjs` copies them into Docmosis's store under that name, so give an include a name no other fixture uses.
 - A merge fixture has an `expected.txt`, the merged text. The functional suite renders it as docx and PDF.
 - A fixture whose name starts with `_` is one Docmosis rejects. It has an `error-phrase.txt` (hand-written: the phrase a rejection message must contain), `expected-error.txt` (Docmosis's status and message) and `expected-devmode.txt` (the document with the errors written in place). The functional suite checks the status and the phrase, and that devMode writes `Docmosis<N>` markers.
 
@@ -123,3 +139,22 @@ node test/parity/capture.mjs                 # rewrite expected files from Docmo
 ```
 
 `compare.mjs` prints `same` or `DIFF` per fixture and exits 1 on any difference. `templates.mjs` generates sample data for real templates, renders each on both with devMode on and writes the data, both texts and a diff to a directory it prints. Docmosis caches templates by file mtime, so every template copied into it gets a fresh name; the scripts do this themselves. Templates are sent to this service inline.
+
+### Visual parity
+
+`test/parity/visual.mjs` measures how close this service's PDFs look to a licensed Docmosis's. It needs the same two backends as above, plus Docker for a throwaway image (`dtsse-doc-render-visual`, built once from `test/parity/visual/Dockerfile`: Alpine, poppler-utils and ImageMagick). Files go in and out with `docker cp`, so a remote Docker daemon works.
+
+```
+node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base CV-PCS-CLM-ENG-Defence-Form --out /tmp/vis
+node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base --sample 120 --include names.txt --out /tmp/vis
+node test/parity/fonts.mjs <hmcts/docmosis>/Templates/Base --out /tmp/fonts.json
+```
+
+For each template it generates data (the generator is shared with `templates.mjs` in `datagen.mjs`), renders a PDF on both with devMode on, rasterises every page at 100 dpi and writes `summary.json` and `report.html` to `--out`, with the PDFs and page images under `work/<template>/`. `--sample N` draws a sample proportional by jurisdiction prefix (`CV-`, `FL-`, `TB-`, ...) and always includes the names in the `--include` file. `--jobs` sets render concurrency (default 3), `--reuse` re-analyses PDFs already in `--out` without rendering, and `VISUAL_FUZZ` the anti-alias colour tolerance (default 12%). Per template the summary has:
+
+- page counts on each side;
+- per-page mismatch, the percentage of pixels that differ beyond the tolerance, and the same as a share of inked pixels;
+- structural shift: text lines from `pdftotext -bbox-layout` matched by text, with the median and maximum horizontal and vertical offset in points, and how many lines moved to another page. A large shift with a low mismatch is content that moved; a high mismatch with no shift is a font or rendering difference;
+- the fonts embedded in each PDF (`pdffonts`) and the image count.
+
+`report.html` lists every template and shows the worst pages side by side with a diff image. A template that fails to render on either backend is listed under `failed` and not measured. `fonts.mjs` counts the font families the templates ask for (`fontTable.xml` and `w:rFonts`) and tabulates what `fc-match` picks in each container.

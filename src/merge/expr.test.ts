@@ -36,16 +36,17 @@ describe("parseInstruction blocks", () => {
     ["else", { kind: "else" }],
     ["else_{a=1}", { kind: "else", cond: "{a=1}" }],
     ["else_flag", { kind: "else", cond: "flag" }],
-    ["else{a=1}", { kind: "else", cond: "{a=1}" }],
-    ["else {a=1}", { kind: "else", cond: "{a=1}" }],
+    ["else{a=1}", { kind: "else" }],
+    ["else {a=1}", { kind: "else" }],
+    ["else{ a=‘unterminated}", { kind: "else" }],
     ["/* note */", { kind: "comment" }],
     ["/* unterminated", { kind: "comment" }]
   ] as [string, Instruction][])("%s", (text, expected) => {
     expect(parseInstruction(text)).toEqual(expected);
   });
 
-  it("is not fooled by a field that starts with else", () => {
-    expect(parseInstruction("elsewhere")).toEqual({ kind: "field", expr: "elsewhere", optionalParagraph: false });
+  it("Docmosis: anything after else that does not start with an underscore is ignored, even a field name", () => {
+    expect(parseInstruction("elsewhere")).toEqual({ kind: "else" });
   });
 });
 
@@ -102,14 +103,30 @@ describe("parseInstruction assignments and fields", () => {
     expect(parseInstruction("html:{markup}")).toEqual({ kind: "field", expr: "markup", optionalParagraph: false, html: true });
   });
 
-  it.each([["ref:other"], ["refLookup:x"], ["image:a.png"], ["img:a"], ["md:text"], ["bookmark:b"]])("%s is unsupported", (text) => {
+  it.each([["image:a.png"], ["img:a"], ["md:text"], ["bookmark:b"]])("%s is unsupported", (text) => {
     const inst = parseInstruction(text);
     expect(inst.kind).toBe("unsupported");
     expect(inst).toMatchObject({ text, reason: expect.stringContaining("not supported") });
   });
 
-  it("renderer suffix is unsupported", () => {
-    expect(parseInstruction("issuedOn{renderer=date(dd/MM/yyyy)}")).toMatchObject({ kind: "unsupported", reason: expect.stringContaining("renderer") });
+  it("Docmosis: a renderer suffix is read with the field it follows", () => {
+    expect(parseInstruction("issuedOn{renderer=date('dd/MM/yyyy')}")).toEqual({
+      kind: "field",
+      expr: "issuedOn",
+      optionalParagraph: false,
+      renderer: { name: "date", args: ["dd/MM/yyyy"] },
+      qualifierError: undefined
+    });
+    expect(parseInstruction("op:issuedOn{renderer=boolean}")).toMatchObject({ optionalParagraph: true, renderer: { name: "boolean", args: [] } });
+    expect(parseInstruction("issuedOn{renderer=date(dd/MM/yyyy)}")).toMatchObject({ kind: "field", qualifierError: expect.stringContaining("single quotes") });
+  });
+
+  it("Docmosis: ref:name and refLookup:path name a template to include", () => {
+    expect(parseInstruction("ref:other.docx")).toEqual({ kind: "ref", name: "other.docx" });
+    expect(parseInstruction("ref:other.docx ")).toEqual({ kind: "ref", name: "other.docx" });
+    expect(parseInstruction("refLookup:value")).toEqual({ kind: "refLookup", path: "value" });
+    expect(() => parseInstruction("ref:")).toThrow("is not complete");
+    expect(() => parseInstruction("ref: x")).toThrow("leading or trailing whitespace");
   });
 });
 
@@ -126,6 +143,13 @@ describe("Scope", () => {
     expect(c.lookup("$this.x")).toBe(1);
     expect(c.lookup("$parent.name")).toBe("root-name");
     expect(r.lookup("$parent")).toBeUndefined();
+  });
+
+  it("counts items from 1 in $itemnum and $num and from 0 in $idx, and a document outside any repeat is item 1, as Docmosis does", () => {
+    const item = root().child({}, 3, 5);
+    expect([item.lookup("$itemnum"), item.lookup("$num"), item.lookup("$idx")]).toEqual([3, 3, 2]);
+    const outside = root();
+    expect([outside.lookup("$itemnum"), outside.lookup("$num"), outside.lookup("$idx"), outside.lookup("$size")]).toEqual([1, 1, 0, 0]);
   });
 
   it("$this may be a scalar", () => {
@@ -182,7 +206,7 @@ describe("Scope", () => {
     expect(r.lookup("$known")).toBeUndefined();
   });
 
-  it.each(["num", "itemnum", "this", "size", "root", "parent"])("Docmosis: $%s=5 is Cannot set built in variable", (name) => {
+  it.each(["num", "itemnum", "idx", "this", "size", "root", "parent"])("Docmosis: $%s=5 is Cannot set built in variable", (name) => {
     expect(() => root().setVar(name, 5)).toThrow(`Cannot set built in variable $${name}`);
   });
 });

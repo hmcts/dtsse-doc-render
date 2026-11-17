@@ -1,64 +1,37 @@
-import { strFromU8, strToU8, unzipSync, type Zippable, zipSync } from "fflate";
+import { strFromU8, strToU8, type Zippable, zipSync } from "fflate";
 import { LimitError } from "./errors.ts";
 import { Scope } from "./expr.ts";
+import { ImageMerger } from "./images.ts";
+import { IncludeHost } from "./include.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
 import { renderPart } from "./render.ts";
+import { dropSvgAlternatives } from "./svg.ts";
+import { type ArchiveTally, DocxFormatError, unzipWithin } from "./zip.ts";
+
+export { DocxFormatError };
 
 const CONTENT_PART = /^word\/(document|header\d*|footer\d*)\.xml$/;
 const ALREADY_COMPRESSED = /\.(png|jpe?g|gif|zip|docx|xlsx|pptx|mp3|mp4)$/i;
-
-export class DocxFormatError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "DocxFormatError";
-  }
-}
 
 export interface RenderResult {
   output: Buffer;
   messages: string[];
 }
 
-const mib = (n: number): string => `${Math.round(n / (1024 * 1024))} MiB`;
-
-/**
- * Inflates every entry, refusing an archive whose declared sizes break the limits. fflate inflates into a buffer of the
- * declared size and fails if the data is longer, so the declared sizes bound the real ones; an entry declaring no size
- * but carrying data would be inflated without a bound, so it is refused.
- */
-function unzipWithin(template: Buffer, limits: Limits): Record<string, Uint8Array> {
-  let entries = 0;
-  let total = 0;
-  try {
-    return unzipSync(new Uint8Array(template.buffer, template.byteOffset, template.byteLength), {
-      filter: (file) => {
-        if (++entries > limits.maxEntries) {
-          throw new LimitError(`the archive has more than ${limits.maxEntries} entries`);
-        }
-        if (file.originalSize > limits.maxEntryBytes) {
-          throw new LimitError(`${file.name} is larger than ${mib(limits.maxEntryBytes)} uncompressed`);
-        }
-        total += file.originalSize;
-        if (total > limits.maxTotalBytes) {
-          throw new LimitError(`the archive is larger than ${mib(limits.maxTotalBytes)} uncompressed`);
-        }
-        if (file.originalSize === 0 && file.compression !== 0 && file.size > 16) {
-          throw new DocxFormatError(`${file.name} declares no uncompressed size but has data`);
-        }
-        return true;
-      }
-    });
-  } catch (e) {
-    if (e instanceof LimitError || e instanceof DocxFormatError) {
-      throw e;
-    }
-    throw new DocxFormatError(`not a readable zip archive: ${e instanceof Error ? e.message : String(e)}`);
-  }
+export interface RenderOptions {
+  devMode: boolean;
+  now?: Date;
+  limits?: Partial<Limits>;
+  /** Templates a `ref:` or `refLookup:` may name, by name. */
+  includes?: Record<string, Buffer>;
 }
 
-export function renderDocx(template: Buffer, data: unknown, options: { devMode: boolean; now?: Date; limits?: Partial<Limits> }): RenderResult {
+export function renderDocx(template: Buffer, data: unknown, options: RenderOptions): RenderResult {
   const limits = resolveLimits(options.limits);
-  const entries = unzipWithin(template, limits);
+  const tally: ArchiveTally = { entries: 0, total: 0 };
+  const entries = unzipWithin(template, limits, tally);
+  const host = new IncludeHost(entries, options.includes ?? {}, limits, tally);
+  const images = new ImageMerger(entries, (path) => host.read(path));
   const names = Object.keys(entries);
   if (!names.includes("word/document.xml")) {
     throw new DocxFormatError("no word/document.xml, so this is not a .docx");
@@ -71,7 +44,7 @@ export function renderDocx(template: Buffer, data: unknown, options: { devMode: 
   const budget = { limits, nodes: 0, bytes: 0 };
   try {
     for (const name of parts) {
-      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget)));
+      rendered.set(name, strToU8(renderPart(strFromU8(entries[name]!), name, scope, options.devMode, messages, counter, budget, host, images)));
     }
   } catch (e) {
     if (e instanceof LimitError) {
@@ -79,8 +52,14 @@ export function renderDocx(template: Buffer, data: unknown, options: { devMode: 
     }
     throw new DocxFormatError(`${e instanceof Error ? e.message : String(e)}`);
   }
+  for (const [name, bytes] of host.finish()) {
+    entries[name] = bytes;
+  }
+  images.finish();
+  dropSvgAlternatives(entries, rendered);
   const mtime = options.now ?? new Date();
-  const ordered = [...names.filter((n) => n === "[Content_Types].xml"), ...names.filter((n) => n !== "[Content_Types].xml")];
+  const all = Object.keys(entries);
+  const ordered = [...all.filter((n) => n === "[Content_Types].xml"), ...all.filter((n) => n !== "[Content_Types].xml")];
   const files: Zippable = {};
   for (const name of ordered) {
     const data = rendered.get(name) ?? entries[name]!;

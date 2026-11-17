@@ -34,6 +34,8 @@ interface UploadedFile {
 interface ParsedRequest {
   params: Record<string, unknown>;
   files: Record<string, UploadedFile>;
+  /** Extra file parts named "include", by filename. */
+  includeFiles: UploadedFile[];
 }
 
 class HttpError extends Error {
@@ -84,7 +86,7 @@ const readBody = async (request: IncomingMessage, limit: number): Promise<Buffer
 
 const parseMultipart = (body: Buffer, contentType: string, limit: number): Promise<ParsedRequest> =>
   new Promise((resolve, reject) => {
-    const parsed: ParsedRequest = { params: {}, files: {} };
+    const parsed: ParsedRequest = { params: {}, files: {}, includeFiles: [] };
     const tooLarge = new HttpError(413, "Request body too large", `Request bodies are limited to ${limit} bytes`);
     let parser: busboy.Busboy;
     try {
@@ -105,7 +107,12 @@ const parseMultipart = (body: Buffer, contentType: string, limit: number): Promi
       stream.on("data", (chunk: Buffer) => chunks.push(chunk));
       stream.on("limit", () => reject(tooLarge));
       stream.on("end", () => {
-        parsed.files[name] = { filename: info.filename ?? "", content: Buffer.concat(chunks) };
+        const file = { filename: info.filename ?? "", content: Buffer.concat(chunks) };
+        if (name === "include") {
+          parsed.includeFiles.push(file);
+        } else {
+          parsed.files[name] = file;
+        }
       });
     });
     parser.on("error", (error) => reject(new HttpError(400, "Invalid multipart body", (error as Error).message)));
@@ -120,17 +127,17 @@ const parseBody = async (request: IncomingMessage, limit: number): Promise<Parse
     return parseMultipart(body, contentType, limit);
   }
   if (body.length === 0) {
-    return { params: {}, files: {} };
+    return { params: {}, files: {}, includeFiles: [] };
   }
   if (/^application\/x-www-form-urlencoded/i.test(contentType)) {
-    return { params: Object.fromEntries(new URLSearchParams(body.toString("utf8"))), files: {} };
+    return { params: Object.fromEntries(new URLSearchParams(body.toString("utf8"))), files: {}, includeFiles: [] };
   }
   try {
     const value: unknown = JSON.parse(body.toString("utf8"));
     if (value === null || typeof value !== "object" || Array.isArray(value)) {
       throw new Error("expected a JSON object");
     }
-    return { params: value as Record<string, unknown>, files: {} };
+    return { params: value as Record<string, unknown>, files: {}, includeFiles: [] };
   } catch (error) {
     throw new HttpError(400, "Invalid request body", `The request body is not valid JSON: ${(error as Error).message}`);
   }
@@ -179,6 +186,13 @@ const MISSING_TEMPLATE = "Templates must be sent inline (templateBase64 or templ
 const hasInlineTemplate = ({ params, files }: ParsedRequest): boolean =>
   Boolean(files.templateFile) || (params.templateBase64 !== undefined && params.templateBase64 !== "");
 
+const zipOf = (content: Buffer, name: string): Buffer => {
+  if (!content.subarray(0, ZIP_MAGIC.length).equals(ZIP_MAGIC)) {
+    throw new HttpError(400, "Invalid template", `${name} is not a .docx: the template bytes are not a zip archive`);
+  }
+  return content;
+};
+
 const templateOf = ({ params, files }: ParsedRequest): Buffer => {
   const name = typeof params.templateName === "string" && params.templateName !== "" ? params.templateName : "the inline template";
   let content: Buffer;
@@ -194,6 +208,42 @@ const templateOf = ({ params, files }: ParsedRequest): Buffer => {
     throw new HttpError(400, "Invalid template", `${name} is not a .docx: the template bytes are not a zip archive`);
   }
   return content;
+};
+
+const MAX_INCLUDES = 100;
+
+/** The templates a `ref:` or `refLookup:` may name: the JSON `includes` object (name to base64) and any "include" file parts (by filename). */
+const includesOf = ({ params, includeFiles }: ParsedRequest): Record<string, Buffer> => {
+  const included: Record<string, Buffer> = Object.create(null) as Record<string, Buffer>;
+  let declared = params.includes;
+  if (typeof declared === "string" && declared !== "") {
+    try {
+      declared = JSON.parse(declared);
+    } catch (error) {
+      throw new HttpError(400, "Invalid includes", `includes is not valid JSON: ${(error as Error).message}`);
+    }
+  }
+  if (declared !== undefined && declared !== null && declared !== "") {
+    if (typeof declared !== "object" || Array.isArray(declared)) {
+      throw new HttpError(400, "Invalid includes", "includes must be an object of template name to base64 .docx");
+    }
+    for (const [name, value] of Object.entries(declared)) {
+      if (typeof value !== "string") {
+        throw new HttpError(400, "Invalid includes", `${name}: an include must be a base64 string`);
+      }
+      included[name] = zipOf(decodeBase64(value, name), name);
+    }
+  }
+  for (const file of includeFiles) {
+    if (file.filename === "") {
+      throw new HttpError(400, "Invalid includes", "an include file part needs a filename, which is the name a ref: tag uses");
+    }
+    included[file.filename] = zipOf(file.content, file.filename);
+  }
+  if (Object.keys(included).length > MAX_INCLUDES) {
+    throw new HttpError(400, "Too many includes", `A request may carry at most ${MAX_INCLUDES} includes`);
+  }
+  return included;
 };
 
 const dataOf = ({ params, files }: ParsedRequest): unknown => {
@@ -231,7 +281,7 @@ export const createHandler = (deps: Dependencies) => {
     }
     const template = templateOf(parsed);
     const data = dataOf(parsed);
-    const docx = await merge(template, data, { devMode: isTrue(parsed.params.devMode) });
+    const docx = await merge(template, data, { devMode: isTrue(parsed.params.devMode), includes: includesOf(parsed) });
     let bytes: Buffer;
     if (output.format === "docx") {
       bytes = docx;
@@ -308,7 +358,7 @@ export const createHandler = (deps: Dependencies) => {
       throw new HttpError(405, "Method not allowed", `${method} is not supported for ${path}`);
     }
 
-    const parsed = method === "POST" ? await parseBody(request, limit) : { params: {}, files: {} };
+    const parsed = method === "POST" ? await parseBody(request, limit) : { params: {}, files: {}, includeFiles: [] };
     await handle(parsed, response);
   };
 

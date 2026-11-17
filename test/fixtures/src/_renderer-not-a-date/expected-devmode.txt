@@ -1,0 +1,3 @@
+Before
+<<word{renderer=date('yyyy','yyyy-MM-dd')}>>Docmosis1
+After

@@ -1,12 +1,15 @@
 import { ExpressionError } from "./errors.ts";
 import { callFunction, isEmpty, sizeOf } from "./functions.ts";
 import { type Token, tokenize } from "./lexer.ts";
+import { parseQualified, type Renderer } from "./renderer.ts";
 import { conditionTrue, Decimal, formatValue, isNumeric, OperandError, repeatItems, scalar, toDecimal, toNumber, truthy } from "./values.ts";
 
 export { conditionTrue, ExpressionError, formatValue, repeatItems, truthy };
 
 export type Instruction =
-  | { kind: "field"; expr: string; optionalParagraph: boolean; html?: boolean }
+  | { kind: "field"; expr: string; optionalParagraph: boolean; html?: boolean; renderer?: Renderer; qualifierError?: string }
+  | { kind: "ref"; name: string }
+  | { kind: "refLookup"; path: string }
   | { kind: "cs" | "cr"; cond: string }
   | { kind: "rs" | "rr"; expr: string }
   | { kind: "es" | "er" }
@@ -47,7 +50,7 @@ function descend(value: unknown, rest: Segment[]): unknown {
   return current;
 }
 
-const READ_ONLY = new Set(["num", "itemnum", "this", "size", "root", "parent"]);
+const READ_ONLY = new Set(["num", "itemnum", "idx", "this", "size", "root", "parent"]);
 
 export class Scope {
   readonly vars = new Map<string, unknown>();
@@ -112,7 +115,10 @@ export class Scope {
       case "parent":
         return descend(this.parent?.item, rest);
       case "itemnum":
-        return this.index;
+      case "num":
+        return this.index || 1;
+      case "idx":
+        return (this.index || 1) - 1;
       case "size":
         return this.size;
       case "nl":
@@ -128,7 +134,7 @@ export class Scope {
   }
 }
 
-const UNSUPPORTED_PREFIX = /^(ref|refLookup|image|img|md|bookmark):/;
+const UNSUPPORTED_PREFIX = /^(image|img|md|bookmark):/;
 const BARE_CALL = /^[A-Za-z_]\w*\(/;
 const ASSIGN = /^\$([A-Za-z_]\w*)\s*=(?!=)\s*([\s\S]*)$/;
 
@@ -157,9 +163,9 @@ export function parseInstruction(text: string): Instruction {
   if (/^(es|er)_/.test(t)) {
     return { kind: t.startsWith("es") ? "es" : "er" };
   }
-  const otherwise = /^else(?:_\s*|\s*(?=\{)|$)(.*)$/s.exec(t);
+  const otherwise = /^else(?:_\s*([\s\S]*))?/.exec(t);
   if (otherwise) {
-    const cond = otherwise[1]!.trim();
+    const cond = (otherwise[1] ?? "").trim();
     return cond === "" ? { kind: "else" } : { kind: "else", cond };
   }
   if (t.startsWith("/*")) {
@@ -176,15 +182,31 @@ export function parseInstruction(text: string): Instruction {
     const expr = stripBraces(rendered[2]!);
     return rendered[1] === "html" ? { kind: "field", expr, optionalParagraph: false, html: true } : { kind: "field", expr, optionalParagraph: false };
   }
+  const include = /^(refLookup|ref):([\s\S]*)$/.exec(t);
+  if (include) {
+    const argument = include[2]!;
+    if (argument.trim() === "") {
+      throw new ExpressionError(`Field "${t}" is not complete.  Suggestion 1:Make sure your field does not contain spaces `);
+    }
+    if (/^\s/.test(argument)) {
+      throw new ExpressionError(
+        `Field "${t}" contains leading or trailing whitespace.  Suggestion 1:Remove the leading and trailing spaces from the field reference `
+      );
+    }
+    return include[1] === "ref" ? { kind: "ref", name: argument.trim() } : { kind: "refLookup", path: argument.trim() };
+  }
   const prefix = UNSUPPORTED_PREFIX.exec(t);
   if (prefix) {
     return { kind: "unsupported", text: t, reason: `${prefix[1]}: is not supported` };
   }
-  if (!t.startsWith("{") && /\{\s*renderer\s*=/.test(t)) {
-    return { kind: "unsupported", text: t, reason: "field renderers are not supported" };
+  const optional = t.startsWith("op:");
+  const fieldText = optional ? t.slice(3).trim() : t;
+  const qualified = fieldText.startsWith("{") ? null : parseQualified(fieldText);
+  if (qualified) {
+    return { kind: "field", expr: qualified.name, optionalParagraph: optional, renderer: qualified.renderer, qualifierError: qualified.error };
   }
-  if (t.startsWith("op:")) {
-    return { kind: "field", expr: t.slice(3).trim(), optionalParagraph: true };
+  if (optional) {
+    return { kind: "field", expr: fieldText, optionalParagraph: true };
   }
   if (!t.startsWith("{") && BARE_CALL.test(t)) {
     const nested = /^([A-Za-z_]\w*\([^\s.,)]*)\./.exec(t);

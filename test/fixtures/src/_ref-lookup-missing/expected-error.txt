@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<refLookup:header>> Can't load sub-template: no lookup name found via lookup:header  Suggestion 1:Make sure your DataProvider contains the requested lookup value 

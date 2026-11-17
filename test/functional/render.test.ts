@@ -8,13 +8,13 @@ const failure = (outcome: { body: Buffer }) => outcome.body.toString("utf8", 0, 
 
 describe.each(loadFixtures())("fixture $name", (fixture) => {
   it("merges to the expected text as docx", async () => {
-    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", data: fixture.data, includes: fixture.includes });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     expect(docxText(outcome.body).join("\n")).toBe(fixture.expected.join("\n"));
   });
 
   it("renders to PDF", async () => {
-    const outcome = await renderInline(fixture.docx, { outputFormat: "pdf", data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "pdf", data: fixture.data, includes: fixture.includes });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     expect(isPdf(outcome.body)).toBe(true);
   });
@@ -22,7 +22,7 @@ describe.each(loadFixtures())("fixture $name", (fixture) => {
 
 describe.each(loadErrorFixtures())("error fixture $name", (fixture) => {
   it("rejects the template with Docmosis's message outside devMode", async () => {
-    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: false, data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: false, data: fixture.data, includes: fixture.includes });
     expect(outcome.response.status, failure(outcome)).toBe(400);
     const body = JSON.parse(outcome.body.toString("utf8"));
     expect(body.succeeded).toBe(false);
@@ -30,7 +30,7 @@ describe.each(loadErrorFixtures())("error fixture $name", (fixture) => {
   });
 
   it("writes the error into the document in devMode", async () => {
-    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: true, data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: true, data: fixture.data, includes: fixture.includes });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     const lines = docxText(outcome.body);
     expect(lines.join("\n")).toMatch(/Docmosis\d+/);

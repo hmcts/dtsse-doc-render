@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { docxText } from "../support/docx-text.ts";
@@ -32,6 +33,12 @@ export function fixtureData(name) {
   return JSON.parse(readFileSync(join(srcDir, name, "data.json"), "utf8"));
 }
 
+/** The templates a fixture includes, by the name its ref: tags use, from test/fixtures/<name>.includes/. */
+export function fixtureIncludes(name) {
+  const dir = join(fixturesDir, `${name}.includes`);
+  return existsSync(dir) ? Object.fromEntries(readdirSync(dir).map((file) => [file, readFileSync(join(dir, file))])) : {};
+}
+
 export function fixtureDocx(name) {
   return readFileSync(join(fixturesDir, `${name}.docx`));
 }
@@ -59,8 +66,22 @@ async function post(url, body) {
   return { ok, status: response.status, buffer, error };
 }
 
+/**
+ * Copies included templates into the container under the names the template's ref: tags use. A ref: names a template in
+ * Docmosis's store, so unlike the template itself they cannot take a unique name: give them names no other fixture uses.
+ */
+function storeIncludes(includes) {
+  const dir = mkdtempSync(join(tmpdir(), "parity-includes-"));
+  for (const [name, content] of Object.entries(includes)) {
+    const file = join(dir, name);
+    writeFileSync(file, content);
+    execFileSync("docker", ["cp", file, `${docmosisContainer}:/home/docmosis/templates/${name}`]);
+  }
+}
+
 /** Renders a template file on the licensed Docmosis. Templates are copied into the container under a unique name because Docmosis caches by mtime. */
-export async function renderOnDocmosis(docx, data, { format = "docx", devMode = false, label = "t" } = {}) {
+export async function renderOnDocmosis(docx, data, { format = "docx", devMode = false, label = "t", includes = {} } = {}) {
+  storeIncludes(includes);
   const templateName = uniqueName(label);
   const file = typeof docx === "string" ? docx : null;
   if (!file) {
@@ -78,9 +99,10 @@ export async function renderOnDocmosis(docx, data, { format = "docx", devMode = 
 }
 
 /** Renders a template file on a dtsse-doc-render instance, sending the template inline. */
-export async function renderOnRenderer(docx, data, { format = "docx", devMode = false } = {}) {
+export async function renderOnRenderer(docx, data, { format = "docx", devMode = false, includes = {} } = {}) {
   return post(rendererUrl, {
     templateBase64: readFileSync(docx).toString("base64"),
+    includes: Object.fromEntries(Object.entries(includes).map(([name, content]) => [name, content.toString("base64")])),
     outputName: `out.${format}`,
     outputFormat: format,
     devMode,

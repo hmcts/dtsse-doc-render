@@ -21,6 +21,8 @@ export interface XEl {
   cache?: unknown;
   /** Further paragraphs a value's line breaks split this one into, in order. */
   rest?: XEl[];
+  /** Set on the paragraph that follows an included template, where a `ref:` split its host paragraph. */
+  refBreak?: boolean;
 }
 
 export type XNode = XText | XEl;
@@ -41,11 +43,22 @@ export function decodeEntities(s: string): string {
 }
 
 /** Characters XML 1.0 cannot carry: C0 controls other than tab, LF and CR, lone surrogates, U+FFFE and U+FFFF. */
-// biome-ignore lint/suspicious/noControlCharactersInRegex: the point is to match control characters
-const XML_ILLEGAL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+const isIllegalXml = (cp: number): boolean =>
+  (cp <= 0x1f && cp !== 0x09 && cp !== 0x0a && cp !== 0x0d) || (cp >= 0xd800 && cp <= 0xdfff) || cp === 0xfffe || cp === 0xffff;
 
 export function stripIllegalXml(s: string): string {
-  return s.replace(XML_ILLEGAL, "");
+  let out = "";
+  let from = 0;
+  for (let i = 0; i < s.length; ) {
+    const cp = s.codePointAt(i)!;
+    const width = cp > 0xffff ? 2 : 1;
+    if (isIllegalXml(cp)) {
+      out += s.slice(from, i);
+      from = i + width;
+    }
+    i += width;
+  }
+  return from === 0 ? s : out + s.slice(from);
 }
 
 export function encodeText(s: string): string {
