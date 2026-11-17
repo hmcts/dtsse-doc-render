@@ -1,0 +1,7 @@
+1) Ms Jane Smith
+Role: claimant
+Represented by A Solicitor for Ms Jane Smith (1/2)
+Represented by B Barrister for Ms Jane Smith (2/2)
+2) Acme Ltd
+Role: defendant
+Unrepresented

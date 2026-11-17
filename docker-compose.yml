@@ -1,0 +1,10 @@
+services:
+  doc-render:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      # Set to AAT (or another environment folder) when mounting a clone of hmcts/docmosis's Templates/.
+      TEMPLATE_ENV: ${TEMPLATE_ENV:-}
+    volumes:
+      - ${TEMPLATES_DIR:-./templates}:/templates:ro

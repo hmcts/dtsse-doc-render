@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;court.name&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Claim number: &lt;&lt;claimNumber&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;claimant.name&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;claimant.address.line1&gt;&gt;, &lt;&lt;claimant.address.town&gt;&gt; &lt;&lt;claimant.address.postcode&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Dear &lt;&lt;claimant.name&gt;&gt;,</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Your claim against &lt;&lt;defendants[0].name&gt;&gt; and &lt;&lt;defendants[1].name&gt;&gt; has been issued.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The claim amount is &lt;&lt;claim.amount&gt;&gt;.</w:t></w:r></w:p>
+  </w:body>
+</w:document>

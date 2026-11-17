@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{claim.interestClaimed}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Interest is claimed on the amount.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;else&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">No interest is claimed.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{claim.hasSolicitor}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The claimant is represented.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;else_{claim.status = ‘issued’}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The claim has been issued.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;else&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The claim status is unknown.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_claim.type&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Type of claim: &lt;&lt;claim.type&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_claim&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{claim.amount &gt; 1000 &amp;&amp; claim.amount &lt; 5000}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">This is a fast track claim.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{claim.amount == 99}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">The amount is exactly 99.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">You are &lt;&lt;cs_{isCorporate}&gt;&gt;a company&lt;&lt;else&gt;&gt;an individual&lt;&lt;es_&gt;&gt; in this claim.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Flag:&lt;&lt;cs_stringFalse&gt;&gt; shown&lt;&lt;es_&gt;&gt;.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Status is &lt;&lt;cs_{claim.status = ‘closed’}&gt;&gt;closed&lt;&lt;else_{claim.status != ‘issued’}&gt;&gt;not issued&lt;&lt;else_{!claim.hasSolicitor}&gt;&gt;issued without a solicitor&lt;&lt;else&gt;&gt;issued&lt;&lt;es_&gt;&gt;.</w:t></w:r></w:p>
+  </w:body>
+</w:document>

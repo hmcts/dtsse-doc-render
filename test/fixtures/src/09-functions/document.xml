@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Hearing date: &lt;&lt;dateFormat(hearingDate,'d MMMM yyyy','yyyy-MM-dd')&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Hearing day: &lt;&lt;dateFormat(hearingDate,'EEEE','yyyy-MM-dd')&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Hearing time: &lt;&lt;dateFormat(hearingDateTime,'h:mm a','yyyy-MM-dd HH:mm')&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Numeric: &lt;&lt;dateFormat(hearingDate,'dd/MM/yyyy','yyyy-MM-dd')&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{dateFormat($nowUTC,'yyyy') != ‘’}&gt;&gt;Generated today.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Name: &lt;&lt;titleCase(party.name)&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Upper: &lt;&lt;toUpperCase(party.name)&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Lower: &lt;&lt;toLowerCase(party.shout)&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Nickname: &lt;&lt;ifBlank(party.nickname,'None')&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Name or nickname: &lt;&lt;{toUpperCase(ifBlank(party.nickname,party.name))}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Blank check: &lt;&lt;cs_{isBlank(party.nickname)}&gt;&gt;no nickname&lt;&lt;else&gt;&gt;has nickname&lt;&lt;es_&gt;&gt;, &lt;&lt;cs_{isBlank(party.name)}&gt;&gt;no name&lt;&lt;else&gt;&gt;has name&lt;&lt;es_&gt;&gt;.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Case-insensitive: &lt;&lt;cs_{equalsIgnoreCase(party.flag,'yes')}&gt;&gt;matches&lt;&lt;else&gt;&gt;differs&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Items: &lt;&lt;{items.size()}&gt;&gt; and &lt;&lt;{items.size}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{items.size() &gt; 2}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">More than two items.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Sum: &lt;&lt;{round(1.4+2.2)}&gt;&gt; and &lt;&lt;{'Case ' + claim.no}&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

@@ -1,0 +1,14 @@
+{
+  "parties": [
+    {
+      "name": "Ms Jane Smith",
+      "role": "claimant",
+      "representatives": ["A Solicitor", "B Barrister"]
+    },
+    {
+      "name": "Acme Ltd",
+      "role": "defendant",
+      "representatives": []
+    }
+  ]
+}

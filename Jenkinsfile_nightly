@@ -10,7 +10,23 @@ def type = "nodejs"
 def product = "dtsse"
 def component = "doc-render"
 
+static Map<String, Object> secret(String secretName, String envVariable) {
+  [
+    $class: 'AzureKeyVaultSecret',
+    secretType: 'Secret',
+    name: secretName,
+    envVariable: envVariable
+  ]
+}
+
+def secrets = [
+  'dtsse-${env}': [
+    secret('doc-render-access-key', 'TEST_ACCESS_KEY')
+  ]
+]
+
 withNightlyPipeline(type, product, component) {
+  loadVaultSecrets(secrets)
   env.TEST_URL = "https://doc-render.aat.platform.hmcts.net"
 
   enableFullFunctionalTest(10)

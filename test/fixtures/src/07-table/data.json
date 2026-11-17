@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "description": "Issue fee",
+      "amount": "£455.00"
+    },
+    {
+      "description": "Hearing fee",
+      "amount": "£1,090.00"
+    },
+    {
+      "description": "Application fee",
+      "amount": "£108.00"
+    }
+  ],
+  "showTotal": true,
+  "total": "£1,653.00",
+  "showNotes": false,
+  "notes": "Paid in full"
+}

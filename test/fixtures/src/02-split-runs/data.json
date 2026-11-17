@@ -1,0 +1,8 @@
+{
+  "claimant": {
+    "name": "Ms Jane Smith"
+  },
+  "defendant": "Acme Ltd",
+  "amount": 250,
+  "reference": "REF-001"
+}

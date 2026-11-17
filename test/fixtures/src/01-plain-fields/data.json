@@ -1,0 +1,25 @@
+{
+  "court": {
+    "name": "County Court Money Claims Centre"
+  },
+  "claimNumber": "K1AB2345",
+  "claimant": {
+    "name": "Ms Jane Smith",
+    "address": {
+      "line1": "1 High Street",
+      "town": "Leeds",
+      "postcode": "LS1 1AA"
+    }
+  },
+  "defendants": [
+    {
+      "name": "Acme Ltd"
+    },
+    {
+      "name": "Mr Bob Jones"
+    }
+  ],
+  "claim": {
+    "amount": 1500
+  }
+}

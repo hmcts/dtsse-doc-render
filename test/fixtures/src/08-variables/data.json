@@ -1,0 +1,15 @@
+{
+  "person": "jane smith",
+  "lines": [
+    {
+      "text": "Issue fee"
+    },
+    {
+      "text": "Hearing fee"
+    },
+    {
+      "text": "Application fee"
+    }
+  ],
+  "names": ["Acme Ltd", "Mr Bob Jones"]
+}
