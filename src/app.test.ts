@@ -109,7 +109,7 @@ describe("routing", () => {
   it("defaults a missing method and url", async () => {
     const handler = createHandler({ merge: vi.fn(), convert: vi.fn() });
     const writeHead = vi.fn();
-    await handler({ headers: {} } as never, { writeHead, end: vi.fn() } as never);
+    await handler({ headers: {} } as never, { writeHead, end: vi.fn(), on: vi.fn() } as never);
     expect(writeHead.mock.calls[0]?.[0]).toBe(404);
   });
 });

@@ -1,0 +1,27 @@
+name: Publish OpenAPI spec
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - openapi.yaml
+      - .github/workflows/publish-openapi.yaml
+  workflow_dispatch:
+
+jobs:
+  publish-openapi:
+    name: Publish OpenAPI spec
+    runs-on: ubuntu-latest
+    env:
+      SWAGGER_PUBLISHER_API_TOKEN: ${{ secrets.SWAGGER_PUBLISHER_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Convert the spec to JSON
+        run: yq -o=json openapi.yaml > "${RUNNER_TEMP}/dtsse-doc-render.json"
+
+      - name: Publish to cnp-api-docs
+        uses: hmcts/cnp-githubactions-library/publish-openapi-spec@main
+        with:
+          spec-path: ${{ runner.temp }}/dtsse-doc-render.json
+          api-name: dtsse-doc-render

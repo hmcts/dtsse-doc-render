@@ -23,10 +23,10 @@ function spend(ctx: Ctx, nodes: number, bytes: number): void {
   b.nodes += nodes;
   b.bytes += bytes;
   if (b.nodes > b.limits.maxOutputNodes) {
-    throw new LimitError(`the merge would produce more than ${b.limits.maxOutputNodes} nodes; repeat blocks are expanding too far`);
+    throw new LimitError(`the merge would produce more than ${b.limits.maxOutputNodes} nodes; repeat blocks are expanding too far`, "outputNodes");
   }
   if (b.bytes > b.limits.maxOutputBytes) {
-    throw new LimitError(`the merge would produce more than ${Math.round(b.limits.maxOutputBytes / 1048576)} MiB of output`);
+    throw new LimitError(`the merge would produce more than ${Math.round(b.limits.maxOutputBytes / 1048576)} MiB of output`, "outputBytes");
   }
 }
 
@@ -220,7 +220,10 @@ function planBlock<N>(block: TBlock<N>, scope: Scope, ctx: Ctx): Plan<N> {
     const value = ins.kind === "rs" || ins.kind === "rr" ? evaluate(ins.expr, scope) : undefined;
     const list = repeatItems(value);
     if (list.length > ctx.budget.limits.maxRepeatItems) {
-      throw new LimitError(`${block.head.loc}: a repeat block has ${list.length} items, more than the limit of ${ctx.budget.limits.maxRepeatItems}`);
+      throw new LimitError(
+        `${block.head.loc}: a repeat block has ${list.length} items, more than the limit of ${ctx.budget.limits.maxRepeatItems}`,
+        "repeatItems"
+      );
     }
     return {
       runs: list.map((item, i) => ({ items: block.branches[0]!.items, scope: scope.child(item, i + 1, list.length) })),
@@ -1299,7 +1302,7 @@ export function renderPart(
   }
   const out = serializeXml(doc);
   if (out.length > budget.limits.maxOutputBytes) {
-    throw new LimitError(`${part} would be larger than ${Math.round(budget.limits.maxOutputBytes / 1048576)} MiB merged`);
+    throw new LimitError(`${part} would be larger than ${Math.round(budget.limits.maxOutputBytes / 1048576)} MiB merged`, "outputBytes");
   }
   return out;
 }

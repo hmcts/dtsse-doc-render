@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { createHandler } from "./app.ts";
-import { type ConvertTarget, converterReady, convertTo, convertToPdf } from "./convert.ts";
-import { mergeDocx } from "./merge/index.ts";
+import type { ConvertTarget } from "./convert.ts";
+import { startTelemetry } from "./telemetry.ts";
+
+// Application Insights has to start before anything else loads, or it disables the loggers created ahead of it.
+const telemetry = await startTelemetry(process.env.APPLICATIONINSIGHTS_CONNECTION_STRING);
+
+const { createHandler } = await import("./app.ts");
+const { converterReady, convertTo, convertToPdf } = await import("./convert.ts");
+const { mergeDocx } = await import("./merge/index.ts");
 
 const port = Number(process.env.PORT ?? 8080);
 
@@ -9,7 +16,9 @@ const handler = createHandler({
   merge: mergeDocx,
   convert: convertToPdf,
   convertTo: (document, sourceExtension, targetFormat) => convertTo(document, sourceExtension, targetFormat as ConvertTarget),
-  ready: converterReady
+  ready: converterReady,
+  openapi: readFileSync(new URL("../openapi.yaml", import.meta.url), "utf8"),
+  telemetry
 });
 
 const server = createServer((request, response) => {

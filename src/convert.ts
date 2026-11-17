@@ -7,7 +7,14 @@ import { pathToFileURL } from "node:url";
 export type OutputFormat = "pdf" | "docx";
 export type ConvertTarget = "pdf" | "doc" | "odt" | "html" | "txt";
 
-export class ConversionError extends Error {}
+export class ConversionError extends Error {
+  constructor(
+    message: string,
+    readonly timedOut = false
+  ) {
+    super(message);
+  }
+}
 
 export class ConversionBusyError extends Error {
   override name = "ConversionBusyError";
@@ -187,7 +194,7 @@ const run = (args: string[], limitMs: number, env: NodeJS.ProcessEnv): Promise<R
     child.on("close", (code, signal) => {
       clearTimeout(timer);
       if (timedOut) {
-        reject(new ConversionError(`LibreOffice timed out after ${limitMs}ms`));
+        reject(new ConversionError(`LibreOffice timed out after ${limitMs}ms`, true));
       } else {
         resolve({ code, signal, output });
       }

@@ -1,0 +1,6 @@
+extends:
+  - recommended
+rules:
+  # getTemplateStructure and getSampleData answer only 501, and the health checks cannot fail with a 4xx.
+  operation-2xx-response: off
+  operation-4xx-response: off

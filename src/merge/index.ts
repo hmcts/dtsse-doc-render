@@ -1,11 +1,13 @@
 import { DocxFormatError, renderDocx } from "./docx.ts";
-import { LimitError } from "./errors.ts";
+import { LimitError, type LimitName } from "./errors.ts";
 import type { Limits } from "./limits.ts";
 
 export class MergeError extends Error {
   constructor(
     message: string,
-    readonly details: string[] = []
+    readonly details: string[] = [],
+    readonly kind: "limit" | "format" | "merge" = "merge",
+    readonly limit?: LimitName
   ) {
     super(message);
     this.name = "MergeError";
@@ -26,10 +28,10 @@ export async function mergeDocx(template: Buffer, data: unknown, options: MergeO
     result = renderDocx(template, data, options);
   } catch (e) {
     if (e instanceof LimitError) {
-      throw new MergeError("Template exceeds the merge limits", [e.message]);
+      throw new MergeError("Template exceeds the merge limits", [e.message], "limit", e.limit);
     }
     if (e instanceof DocxFormatError) {
-      throw new MergeError("Template is not a valid .docx", [e.message]);
+      throw new MergeError("Template is not a valid .docx", [e.message], "format");
     }
     throw e;
   }

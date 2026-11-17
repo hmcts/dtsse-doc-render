@@ -94,6 +94,32 @@ The image carries the fonts of the Docmosis image (Fedora 40), file for file, so
 
 Book Antiqua, a commercial Monotype font that must not be committed here, is copied at build time from the private `hmctsprod.azurecr.io/docmosis/docmosis-unified` image, pinned by digest in the `DOCMOSIS_IMAGE` build arg, and checked against `fonts.sha256`. Local builds need `az acr login --name hmctsprod` first. `docker/fonts/BKANT.TTF` stays gitignored so a copy is never committed.
 
+The `:latest@sha256` pin on that build arg is kept current by Renovate's `dockerfile` manager, which opens a digest-bump pull request. A Renovate digest bump that changes the font needs the sha256 updated.
+
+## API specification
+
+[`openapi.yaml`](openapi.yaml) is the OpenAPI 3.1 description of every endpoint, and the service serves it at `GET /openapi.yaml`. `src/openapi.test.ts` fails when it and the routes in `src/app.ts` disagree. Lint it with `npx @redocly/cli lint openapi.yaml`.
+
+On every push to `master` that changes it, `.github/workflows/publish-openapi.yaml` converts it to JSON and publishes it to [`hmcts/cnp-api-docs`](https://github.com/hmcts/cnp-api-docs) as `docs/specs/dtsse-doc-render.json`, which is served at <https://hmcts.github.io/cnp-api-docs/api/dtsse-doc-render/>.
+
+## Telemetry
+
+Application Insights is on when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set, which the chart reads from the `dtsse` key vault (`AppInsightsConnectionString`), and off when it is not, as locally and in tests. `src/server.ts` starts it before anything else loads.
+
+It records, for each request, the route (never the query string or an unknown path), status and duration, plus unhandled exceptions with their stack but not their message. Custom telemetry:
+
+| Name | Kind | Dimension |
+| --- | --- | --- |
+| `render.duration` | metric, ms | `outputFormat` |
+| `convert.duration` | metric, ms | `outputFormat` |
+| `merge.error` | event | `kind`: `limit`, `format` or `merge` |
+| `limit.tripped` | event | `type`: `body`, `includes`, `entries`, `entryBytes`, `totalBytes`, `outputNodes`, `outputBytes` or `repeatItems` |
+| `libreoffice.timeout` | event | |
+| `conversion.failed` | event | |
+| `conversion.busy` | event | |
+
+Templates, data, file names and error messages are never sent, and console output is not collected.
+
 ## Run it locally
 
 ```

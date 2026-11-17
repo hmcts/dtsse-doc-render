@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import busboy from "busboy";
 import { ConversionError } from "./convert.ts";
 import { MergeError, type MergeOptions } from "./merge/index.ts";
+import { noTelemetry, type Telemetry } from "./telemetry.ts";
 
 export const MAX_BODY_BYTES = 50 * 1024 * 1024;
 
@@ -17,6 +18,32 @@ const MIME: Record<string, string> = {
 const CONVERTED_FORMATS = ["doc", "odt", "html", "txt"];
 const KNOWN_EXTENSIONS = ["pdf", "docx", ...CONVERTED_FORMATS];
 
+const PREFIXES = ["rs", "api"];
+
+/** The Docmosis operations served under each prefix, with the methods openapi.yaml documents for them. */
+const OPERATIONS: Record<string, string[]> = {
+  status: ["GET"],
+  ping: ["GET"],
+  render: ["POST"],
+  convert: ["POST"],
+  getTemplateStructure: ["GET", "POST"],
+  getSampleData: ["GET", "POST"]
+};
+
+/** Every route the service answers. openapi.yaml must document exactly these; app.openapi.test.ts checks it. */
+export const ROUTES: ReadonlyArray<{ method: string; path: string }> = [
+  { method: "GET", path: "/health" },
+  { method: "GET", path: "/health/liveness" },
+  { method: "GET", path: "/health/readiness" },
+  { method: "GET", path: "/openapi.yaml" },
+  ...PREFIXES.flatMap((prefix) =>
+    Object.entries(OPERATIONS).flatMap(([operation, methods]) => methods.map((method) => ({ method, path: `/${prefix}/${operation}` })))
+  )
+];
+
+const routeLabel = (method: string, path: string): string =>
+  ROUTES.some((route) => route.path === path) ? `${method === "GET" || method === "POST" ? method : "OTHER"} ${path}` : "unmatched";
+
 export interface Dependencies {
   merge: (template: Buffer, data: unknown, options: MergeOptions) => Promise<Buffer>;
   convert: (document: Buffer, sourceExtension: string) => Promise<Buffer>;
@@ -24,6 +51,9 @@ export interface Dependencies {
   convertTo?: (document: Buffer, sourceExtension: string, targetFormat: string) => Promise<Buffer>;
   ready?: () => Promise<boolean>;
   maxBodyBytes?: number;
+  /** The text served at GET /openapi.yaml; the route answers 404 without it. */
+  openapi?: string;
+  telemetry?: Telemetry;
 }
 
 interface UploadedFile {
@@ -268,7 +298,14 @@ const contentDisposition = (name: string): string => {
 };
 
 export const createHandler = (deps: Dependencies) => {
-  const { merge, convert, convertTo, ready } = deps;
+  const { merge, convert, convertTo, ready, openapi } = deps;
+  const telemetry = deps.telemetry ?? noTelemetry;
+  const timed = async <T>(metric: string, format: string, work: () => Promise<T>): Promise<T> => {
+    const started = performance.now();
+    const result = await work();
+    telemetry.metric(metric, performance.now() - started, { outputFormat: format });
+    return result;
+  };
   const limit = deps.maxBodyBytes ?? MAX_BODY_BYTES;
 
   const render = async (parsed: ParsedRequest, response: ServerResponse): Promise<void> => {
@@ -281,15 +318,17 @@ export const createHandler = (deps: Dependencies) => {
     }
     const template = templateOf(parsed);
     const data = dataOf(parsed);
+    const started = performance.now();
     const docx = await merge(template, data, { devMode: isTrue(parsed.params.devMode), includes: includesOf(parsed) });
     let bytes: Buffer;
     if (output.format === "docx") {
       bytes = docx;
     } else if (output.format === "pdf") {
-      bytes = await convert(docx, "docx");
+      bytes = await timed("convert.duration", "pdf", () => convert(docx, "docx"));
     } else {
-      bytes = await convertTo!(docx, "docx", output.format);
+      bytes = await timed("convert.duration", output.format, () => convertTo!(docx, "docx", output.format));
     }
+    telemetry.metric("render.duration", performance.now() - started, { outputFormat: output.format });
     sendBytes(
       response,
       200,
@@ -304,7 +343,8 @@ export const createHandler = (deps: Dependencies) => {
       throw new HttpError(400, "Missing file", "The request must include a multipart file part");
     }
     const outputName = typeof params.outputName === "string" && params.outputName !== "" ? params.outputName : "output.pdf";
-    const pdf = await convert(file.content, extensionOf(file.filename) || "docx");
+    const extension = extensionOf(file.filename) || "docx";
+    const pdf = await timed("convert.duration", "pdf", () => convert(file.content, extension));
     sendBytes(response, 200, { "content-type": MIME.pdf as string, "content-disposition": contentDisposition(outputName) }, pdf);
   };
 
@@ -325,6 +365,15 @@ export const createHandler = (deps: Dependencies) => {
 
     if (method === "GET" && (path === "/health" || path === "/health/liveness")) {
       sendJson(response, 200, { status: "UP" });
+      return;
+    }
+
+    if (method === "GET" && path === "/openapi.yaml") {
+      if (openapi === undefined) {
+        sendJson(response, 404, { succeeded: false, shortMsg: "Not found", longMsg: "No OpenAPI document is configured" });
+      } else {
+        sendBytes(response, 200, { "content-type": "application/yaml; charset=utf-8" }, openapi);
+      }
       return;
     }
 
@@ -362,10 +411,36 @@ export const createHandler = (deps: Dependencies) => {
     await handle(parsed, response);
   };
 
+  const record = (error: unknown): void => {
+    if (error instanceof HttpError) {
+      if (error.status === 413) {
+        telemetry.event("limit.tripped", { type: "body" });
+      } else if (error.shortMsg === "Too many includes") {
+        telemetry.event("limit.tripped", { type: "includes" });
+      }
+    } else if (error instanceof Error && error.name === "ConversionBusyError") {
+      telemetry.event("conversion.busy");
+    } else if (error instanceof MergeError) {
+      telemetry.event("merge.error", { kind: error.kind });
+      if (error.limit) {
+        telemetry.event("limit.tripped", { type: error.limit });
+      }
+    } else if (error instanceof ConversionError) {
+      telemetry.event(error.timedOut ? "libreoffice.timeout" : "conversion.failed");
+      telemetry.exception(error);
+    } else {
+      telemetry.exception(error instanceof Error ? error : new Error("non-error thrown"));
+    }
+  };
+
   return async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    const started = performance.now();
+    const label = routeLabel(request.method ?? "GET", (request.url ?? "/").split("?")[0] ?? "/");
+    response.on("close", () => telemetry.request(label, response.statusCode, performance.now() - started));
     try {
       await route(request, response);
     } catch (error) {
+      record(error);
       if (error instanceof HttpError) {
         if (error.status === 413) {
           response.setHeader("connection", "close");

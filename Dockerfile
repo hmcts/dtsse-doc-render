@@ -1,4 +1,4 @@
-ARG DOCMOSIS_IMAGE=hmctsprod.azurecr.io/docmosis/docmosis-unified@sha256:8f4ff62abec8b16e8092ffbdebe2ab8ef0ff0867f816f92b8d020395575cb53d
+ARG DOCMOSIS_IMAGE=hmctsprod.azurecr.io/docmosis/docmosis-unified:latest@sha256:8f4ff62abec8b16e8092ffbdebe2ab8ef0ff0867f816f92b8d020395575cb53d
 
 FROM ${DOCMOSIS_IMAGE} AS docmosis
 
@@ -90,6 +90,7 @@ RUN lo="soffice --headless --norestore --nologo --nolockcheck -env:UserInstallat
 COPY --chown=hmcts:hmcts package.json ./
 COPY --from=production-dependencies --chown=hmcts:hmcts /app/node_modules ./node_modules
 COPY --from=build --chown=hmcts:hmcts /app/dist ./dist
+COPY --chown=hmcts:hmcts openapi.yaml ./
 
 EXPOSE 8080
 
