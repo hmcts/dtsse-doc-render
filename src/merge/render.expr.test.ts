@@ -67,7 +67,7 @@ describe("else_ chains", () => {
 
   it("works inline", async () => {
     const b = para("x <<cs_a>>A<<else_b>>B<<else>>Z<<es_>> y");
-    expect(await run(b, { b: 1 })).toEqual(["x B y"]);
+    expect(await run(b, { b: true })).toEqual(["x B y"]);
     expect(await run(b, {})).toEqual(["x Z y"]);
   });
 
@@ -107,33 +107,31 @@ describe("expression failures", () => {
     expect((err as MergeError).details[0]).toContain("<<fail>>");
   });
 
-  it("writes it into the document in devMode", async () => {
-    expect(await run(para("a <<fail>> b"), {}, dev)).toEqual(["a [ERROR: bad expression <<fail>>] b"]);
+  it("writes the failed instruction and a number into the document in devMode", async () => {
+    expect(await run(para("a <<fail>> b"), {}, dev)).toEqual(["a <<fail>>Docmosis1 b"]);
   });
 
   it("reports unsupported instructions and parse failures", async () => {
-    expect(await run(para("<<bad>> <<boom>>"), {}, dev)).toEqual([
-      "[ERROR: unsupported instruction (nope) <<bad>>] [ERROR: unsupported instruction (cannot parse) <<boom>>]"
-    ]);
+    expect(await run(para("<<bad>> <<boom>>"), {}, dev)).toEqual(["<<bad>>Docmosis1 <<boom>>Docmosis2"]);
   });
 
   it("writes a failing condition as its own paragraph and treats it as false", async () => {
     const b = para("<<cs_fail>>") + para("hidden") + para("<<es_>>") + para("after");
-    expect(await run(b, {}, dev)).toEqual(["[ERROR: bad expression <<cs_fail>>]", "after"]);
+    expect(await run(b, {}, dev)).toEqual(["<<fail>>Docmosis1", "after"]);
   });
 
   it("writes a failing repeat as its own paragraph", async () => {
     const b = para("<<rs_fail>>") + para("x") + para("<<es_>>");
-    expect(await run(b, {}, dev)).toEqual(["[ERROR: bad expression <<rs_fail>>]"]);
+    expect(await run(b, {}, dev)).toEqual(["<<fail>>Docmosis1"]);
   });
 
   it("writes a failing row condition as a row", async () => {
     const b = table(row(cell(para("<<cr_fail>>"))), row(cell(para("r"))), row(cell(para("<<er_>>"))));
     const out = await mergeDocx(makeDocx(b), {}, dev);
-    expect(rows(out)).toEqual(["[ERROR: bad expression <<cr_fail>>]"]);
+    expect(rows(out)).toEqual(["<<fail>>Docmosis1"]);
   });
 
   it("reports an assignment that fails", async () => {
-    expect(await run(para("<<set v=fail>>x"), {}, dev)).toEqual(["[ERROR: bad expression <<set v=fail>>]x"]);
+    expect(await run(para("<<set v=fail>>x"), {}, dev)).toEqual(["<<set v=fail>>Docmosis1x"]);
   });
 });

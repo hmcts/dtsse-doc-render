@@ -1,5 +1,6 @@
+import * as exprModule from "./expr.ts";
 import { ExpressionError, evaluate, formatValue, type Instruction, type Scope, truthy } from "./expr.ts";
-import { type Found, type Para, paraOf } from "./para.ts";
+import { type Found, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, type XEl, type XNode } from "./xml.ts";
 
 export interface Ctx {
@@ -7,6 +8,10 @@ export interface Ctx {
   messages: string[];
   part: string;
   epoch: number;
+  /** Numbers the faults in the body, which Docmosis marks as `Docmosis1`, `Docmosis2`… in document order. */
+  counter: { n: number };
+  /** Headers and footers describe a fault in place; the body numbers them. */
+  body: boolean;
 }
 
 interface Marker {
@@ -40,15 +45,28 @@ type TItem<N> = { t: "node"; node: N } | TBlock<N>;
 
 type Seq<N> = { m: Marker } | { n: N };
 
-type ListEntry = { k: "frag"; el: XEl; origin: number; cont: boolean } | { k: "table" | "sdt" | "other"; node: XNode };
+type ListEntry = { k: "frag"; el: XEl; origin: number; idx: number; cont: boolean } | { k: "table" | "sdt" | "other"; node: XNode };
 
 type RowEntry = { k: "row"; el: XEl } | { k: "other"; node: XNode };
 
 const isStart = (k: Marker["kind"]): boolean => k === "cs" || k === "cr" || k === "rs" || k === "rr";
 
-function fail(ctx: Ctx, reason: string, text: string, where: string): string {
-  ctx.messages.push(`${reason}: <<${text}>> (${ctx.part}, ${where})`);
-  return `[ERROR: ${reason} <<${text}>>]`;
+function straighten(s: string): string {
+  return s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+}
+
+/** What Docmosis leaves in devMode in place of a failed instruction: its own text, then a number in the body or the reason in a header. */
+function devNote(ctx: Ctx, tag: string, reason: string, straight: boolean): string {
+  const shown = `<<${straight ? straighten(tag) : tag}>>`;
+  if (ctx.body) {
+    return `${shown}Docmosis${++ctx.counter.n}`;
+  }
+  return `${shown}${reason} `;
+}
+
+function fail(ctx: Ctx, reason: string, tag: string, where: string, straight = true): string {
+  ctx.messages.push(`${reason}: <<${tag.trim()}>> (${ctx.part}, ${where})`);
+  return devNote(ctx, tag, reason, straight);
 }
 
 function syntheticPara(text: string): XEl {
@@ -119,6 +137,21 @@ function buildTree<N>(seq: Seq<N>[]): TItem<N>[] {
   return root;
 }
 
+/** A list repeats its items, a map repeats once, and anything else repeats nothing. */
+const fallbackRepeatItems = (value: unknown): unknown[] => (Array.isArray(value) ? value : value !== null && typeof value === "object" ? [value] : []);
+
+function repeatItems(value: unknown): unknown[] {
+  try {
+    const shared = (exprModule as { repeatItems?: (value: unknown) => unknown[] }).repeatItems;
+    if (shared) {
+      return shared(value);
+    }
+  } catch {
+    // expr.ts does not export it (yet); the local rule below is the same one
+  }
+  return fallbackRepeatItems(value);
+}
+
 interface Plan<N> {
   runs: { items: TItem<N>[]; scope: Scope }[];
   error?: string;
@@ -138,11 +171,12 @@ function planBlock<N>(block: TBlock<N>, scope: Scope, ctx: Ctx): Plan<N> {
     }
     const ins = block.head.ins;
     const value = ins.kind === "rs" || ins.kind === "rr" ? evaluate(ins.expr, scope) : undefined;
-    const list = Array.isArray(value) ? value : truthy(value) ? [value] : [];
+    const list = repeatItems(value);
     return { runs: list.map((item, i) => ({ items: block.branches[0]!.items, scope: scope.child(item, i + 1, list.length) })) };
   } catch (e) {
     const reason = e instanceof ExpressionError || e instanceof Error ? e.message : String(e);
-    return { runs: [], error: fail(ctx, reason, block.head.text, block.head.loc) };
+    const condition = block.head.text.replace(/^(?:cs|cr|rs|rr)_\s*/, "").replace(/^\{([\s\S]*)\}$/, "$1");
+    return { runs: [], error: fail(ctx, `Error in expression:${reason}`, condition, block.head.loc, false) };
   }
 }
 
@@ -160,12 +194,18 @@ interface Out {
   nodes: XNode[];
   last: XEl | null;
   lastOrigin: string | null;
+  /** Source origin and fragment index of the last paragraph fragment, for joining the fragments of one paragraph. */
+  lastFrag: { origin: number; idx: number } | null;
   killed: Set<string>;
+  /** True while the end of `last` is literal text ending in exactly one space with nothing but zero-output tags since. */
+  seam: boolean;
 }
 
 function pushNode(out: Out, node: XNode): void {
   out.nodes.push(node);
   out.lastOrigin = null;
+  out.lastFrag = null;
+  out.seam = false;
 }
 
 function processTextBoxes(para: Para, scope: Scope, ctx: Ctx): void {
@@ -178,33 +218,108 @@ function processTextBoxes(para: Para, scope: Scope, ctx: Ctx): void {
   }
 }
 
-function renderFragment(el: XEl, scope: Scope, ctx: Ctx): XEl | null | "op" {
+const BLOCK_ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+/**
+ * The plain-text subset of an `html:` value. Block elements end the paragraph (`\f`: the next paragraph has default
+ * properties, as in Docmosis), `<br>` is a line break (`\v`), other tags are dropped and entities decoded.
+ */
+export function htmlToText(html: string): string {
+  const text = html
+    .replace(/<\/?(?:p|div|li|ul|ol|h[1-6]|table|tr|blockquote)(?:\s[^>]*)?\/?>/gi, "\f")
+    .replace(/<br\s*\/?>/gi, "\v")
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(#x[0-9a-f]+|#\d+|\w+);/gi, (m, e: string) => {
+      if (e.startsWith("#")) {
+        const code = e[1] === "x" || e[1] === "X" ? Number.parseInt(e.slice(2), 16) : Number.parseInt(e.slice(1), 10);
+        return Number.isFinite(code) && code <= 0x10ffff ? String.fromCodePoint(code) : m;
+      }
+      return BLOCK_ENTITIES[e.toLowerCase()] ?? m;
+    });
+  return text.replace(/\f+/g, "\f").replace(/^\f|\f$/g, "");
+}
+
+const WHOLE_PARA = (para: Para, f: Found): boolean => f.start === 0 && f.end === para.text.length && para.found.length === 1;
+
+function withoutParagraphProperties(el: XEl): void {
+  el.children = el.children.filter((c) => !(c.kind === "el" && c.name === "w:pPr" && !hasSectPr(el)));
+}
+
+interface FragmentResult {
+  el: XEl | null | "op";
+  /** Whether the end of the fragment is a literal chunk ending in exactly one space, with only zero-output tags since. */
+  seam: "own" | "carry" | null;
+}
+
+function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: (() => void) | null): FragmentResult {
   const para = paraOf(el);
   const where = `paragraph ${el.ord}`;
   for (const p of para.problems) {
     ctx.messages.push(`${p} (${ctx.part}, ${where})`);
   }
-  if (para.found.length === 0) {
-    processTextBoxes(para, scope, ctx);
-    return el;
+  if (para.found.some((f) => f.ins.kind === "comment")) {
+    if (!hasSectPr(el)) {
+      return { el: null, seam: null };
+    }
+    para.kill(0, para.text.length);
+    para.apply();
+    return { el, seam: null };
   }
   let hadMarker = false;
   let opBlank = false;
+  let pageBreak = false;
+  let bare = false;
+  let tail = -1;
+  let carry = drop !== null;
+  let prev = 0;
   const failAt = (f: Found, reason: string): void => {
-    const text = fail(ctx, reason, f.body.trim(), where);
+    const text = fail(ctx, reason, f.body, where);
     para.kill(f.start, f.end);
     if (ctx.devMode) {
       para.insert(f.start, text);
     }
   };
+  const chunk = (a: number, b: number): void => {
+    if (b <= a) {
+      return;
+    }
+    if (para.text[a] === " ") {
+      if (tail >= 0) {
+        para.kill(tail, tail + 1);
+      } else if (carry) {
+        drop?.();
+      }
+    }
+    tail = -1;
+    carry = false;
+    if (para.text[b - 1] === " " && (b - a === 1 || para.text[b - 2] !== " ")) {
+      tail = b - 1;
+    }
+  };
   for (const f of para.found) {
+    chunk(prev, f.start);
+    prev = f.end;
     const ins = f.ins;
     try {
       if (ins.kind === "field") {
-        const value = formatValue(evaluate(ins.expr, scope));
+        if (f.body.trim() === "pageBreak" && WHOLE_PARA(para, f)) {
+          para.kill(f.start, f.end);
+          pageBreak = true;
+          continue;
+        }
+        const raw = formatValue(evaluate(ins.expr, scope));
+        const html = (ins as { html?: boolean }).html === true;
+        const value = html ? htmlToText(raw) : raw;
+        if (html && WHOLE_PARA(para, f)) {
+          bare = true;
+        }
         opBlank ||= ins.optionalParagraph && value.trim() === "";
         para.kill(f.start, f.end);
         para.insert(f.start, value);
+        if (value !== "") {
+          tail = -1;
+          carry = false;
+        }
       } else if (ins.kind === "assign") {
         scope.setVar(ins.name, evaluate(ins.expr, scope));
         para.kill(f.start, f.end);
@@ -214,22 +329,46 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx): XEl | null | "op" {
         hadMarker = true;
       } else if (ins.kind === "unsupported") {
         failAt(f, `unsupported instruction${ins.reason ? ` (${ins.reason})` : ""}`);
+        tail = -1;
+        carry = false;
       } else {
         failAt(f, ORPHAN[ins.kind] ?? "is not valid here");
+        tail = -1;
+        carry = false;
       }
     } catch (e) {
-      failAt(f, e instanceof Error ? e.message : String(e));
+      failAt(
+        f,
+        `Unable to evaluate field expression [${straighten(f.body.trim().replace(/^\{([\s\S]*)\}$/, "$1"))}]:${e instanceof Error ? e.message : String(e)}`
+      );
+      tail = -1;
+      carry = false;
     }
   }
+  chunk(prev, para.text.length);
+  const seam = tail >= 0 ? "own" : carry ? "carry" : null;
   const content = para.apply();
   if (opBlank) {
-    return "op";
+    return { el: "op", seam };
   }
-  if (hadMarker && !content && !hasSectPr(el)) {
-    return null;
+  if (hadMarker && !content && !hasSectPr(el) && !joined) {
+    return { el: null, seam };
+  }
+  if (pageBreak) {
+    withoutParagraphProperties(el);
+    const run = makeEl("w:r", "<w:r>", [makeEl("w:br", '<w:br w:type="page"/>', [], true)]);
+    run.parent = el;
+    el.children.push(run);
+  } else if (bare) {
+    withoutParagraphProperties(el);
   }
   processTextBoxes(para, scope, ctx);
-  return el;
+  splitAfterPageBreaks(el);
+  const parts = splitAtBreaks(el);
+  if (parts.length > 1) {
+    el.rest = parts.slice(1);
+  }
+  return { el, seam };
 }
 
 function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epoch: number, ctx: Ctx): void {
@@ -238,15 +377,26 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
     if (out.killed.has(key)) {
       return;
     }
-    const r = renderFragment(clone ? cloneEl(entry.el) : entry.el, scope, ctx);
+    const sameEpoch = out.lastOrigin === key;
+    const ordered = out.lastFrag?.origin === entry.origin && out.lastFrag.idx < entry.idx;
+    const joined = entry.cont && out.last !== null && (sameEpoch || ordered);
+    const source = clone ? cloneEl(entry.el) : entry.el;
+    if (entry.cont && !joined && paraOf(source).text.trim() === "") {
+      return;
+    }
+    const last = out.last;
+    const drop = joined && out.seam && last ? () => trimTrailingSpace(last) : null;
+    const { el: r, seam } = renderFragment(source, scope, ctx, joined, drop);
     if (r === "op") {
-      if (out.lastOrigin === key) {
+      if (sameEpoch) {
         out.nodes.pop();
       }
       out.killed.add(key);
       out.lastOrigin = null;
+      out.lastFrag = null;
+      out.seam = false;
     } else if (r) {
-      if (entry.cont && out.lastOrigin === key && out.last) {
+      if (joined && out.last) {
         for (const c of r.children) {
           if (c.kind === "el" && c.name === "w:pPr") {
             continue;
@@ -259,8 +409,16 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
       } else {
         out.nodes.push(r);
         out.last = r;
-        out.lastOrigin = key;
       }
+      for (const extra of r.rest ?? []) {
+        out.nodes.push(extra);
+        out.last = extra;
+      }
+      out.lastOrigin = key;
+      out.lastFrag = { origin: entry.origin, idx: entry.idx };
+      out.seam = seam !== null;
+    } else if (seam === null) {
+      out.seam = false;
     }
     return;
   }
@@ -316,20 +474,79 @@ function splitParagraph(el: XEl, para: Para, ms: Marker[], origin: number, seq: 
     p.kill(0, a);
     p.kill(b, para.text.length);
     p.apply();
-    seq.push({ n: { k: "frag", el: copy, origin, cont } });
+    seq.push({ n: { k: "frag", el: copy, origin, idx: seq.filter((x) => "n" in x && x.n.k === "frag" && x.n.origin === origin).length, cont } });
   };
   for (let i = 0; i < ms.length; i++) {
-    frag(i === 0 ? 0 : ms[i - 1]!.end, ms[i]!.start, i > 0 && ms[i - 1]!.inline);
+    frag(i === 0 ? 0 : ms[i - 1]!.end, ms[i]!.start, i > 0 && (ms[i - 1]!.inline || ms[i - 1]!.kind !== "es"));
     seq.push({ m: ms[i]! });
   }
   const last = ms.at(-1)!;
-  frag(last.end, para.text.length, last.inline);
+  frag(last.end, para.text.length, last.inline || last.kind !== "es");
   if (!kept && hasSectPr(el)) {
     frag(para.text.length, para.text.length, false, true);
   }
 }
 
+/** Removes the page breaks (and the spaces between them) in `para` that sit immediately before `upTo`. Returns true when nothing but breaks and whitespace precedes `upTo`. */
+function dropBreaksBefore(para: Para, upTo: number): boolean {
+  let pos = upTo - 1;
+  let only = true;
+  for (; pos >= 0; pos--) {
+    const ch = para.text[pos]!;
+    if (ch === NODE_CHAR) {
+      const seg = para.segs.find((x) => x.start === pos);
+      if (seg?.el.name === "w:br" && seg.el.open.includes('w:type="page"')) {
+        para.kill(pos, pos + 1);
+        continue;
+      }
+      only = false;
+      break;
+    }
+    if (ch !== " ") {
+      only = false;
+      break;
+    }
+  }
+  return only;
+}
+
+/** Docmosis drops a page break that ends a block: one just before an end tag in the same paragraph, or alone in the paragraph before one. */
+function dropTrailingPageBreaks(children: XNode[]): void {
+  let prev: XEl | null = null;
+  for (const c of children) {
+    if (c.kind !== "el" || c.dead) {
+      continue;
+    }
+    if (c.name !== "w:p") {
+      prev = null;
+      continue;
+    }
+    const para = paraOf(c);
+    const touched = new Set<XEl>();
+    for (const f of para.found) {
+      if (f.ins.kind !== "es" && f.ins.kind !== "er") {
+        continue;
+      }
+      const before = para.text.slice(0, f.start);
+      if (before.trim() === "" && !before.includes(NODE_CHAR) && prev) {
+        const pp = paraOf(prev);
+        if (dropBreaksBefore(pp, pp.text.length) && pp.text.includes(NODE_CHAR)) {
+          touched.add(prev);
+        }
+      } else {
+        dropBreaksBefore(para, f.start);
+        touched.add(c);
+      }
+    }
+    for (const t of touched) {
+      paraOf(t).apply();
+    }
+    prev = c;
+  }
+}
+
 export function processList(children: XNode[], scope: Scope, ctx: Ctx): XNode[] {
+  dropTrailingPageBreaks(children);
   const markers: Marker[] = [];
   children.forEach((c, where) => {
     if (c.kind !== "el" || c.dead || c.name !== "w:p") {
@@ -371,13 +588,13 @@ export function processList(children: XNode[], scope: Scope, ctx: Ctx): XNode[] 
       if (ms) {
         splitParagraph(c, paraOf(c), ms, idx, seq);
       } else {
-        seq.push({ n: { k: "frag", el: c, origin: idx, cont: false } });
+        seq.push({ n: { k: "frag", el: c, origin: idx, idx: 0, cont: false } });
       }
     } else {
       seq.push({ n: { k: c.name === "w:tbl" ? "table" : c.name === "w:sdt" ? "sdt" : "other", node: c } });
     }
   });
-  const out: Out = { nodes: [], last: null, lastOrigin: null, killed: new Set() };
+  const out: Out = { nodes: [], last: null, lastOrigin: null, lastFrag: null, killed: new Set(), seam: false };
   emitList(buildTree(seq), scope, out, false, ctx.epoch, ctx);
   return out.nodes;
 }
@@ -502,14 +719,209 @@ function processTable(tbl: XEl, scope: Scope, ctx: Ctx): XEl | null {
   return rows.some((r) => r.kind === "el" && r.name === "w:tr") ? tbl : null;
 }
 
-export function renderPart(xml: string, part: string, scope: Scope, devMode: boolean, messages: string[]): string {
+interface Issue {
+  para: Para;
+  el: XEl;
+  reason: string;
+  /** Where Docmosis puts its marker: the start of the paragraph, or in front of the tag that was never closed. */
+  at: number;
+}
+
+const tagName = (body: string): string => body.trim().replace(/^[a-z]+_\s*/i, "");
+
+function sectionEnd(open: { body: string; para: Para; f: Found }, end: { body: string }): string | null {
+  const wanted = tagName(end.body);
+  const have = tagName(open.body);
+  return wanted !== "" && wanted !== have ? `Mismatched sections.  Expecting section end for section "${have}" but end is for section "${wanted}"` : null;
+}
+
+interface Tag {
+  kind: Instruction["kind"];
+  body: string;
+  para: Para;
+  f: Found;
+}
+
+/** Checks that block tags in one run of paragraphs pair up, the way Docmosis analyses a template before it merges anything. */
+function checkTags(tags: Tag[], row: boolean, issues: Issue[], inCell = false): void {
+  const open: Tag[] = [];
+  const issue = (t: Tag, reason: string, at = 0): void => {
+    issues.push({ para: t.para, el: t.para.el, reason, at });
+  };
+  const startKinds = row ? ["cr", "rr"] : ["cs", "rs"];
+  const endKind = row ? "er" : "es";
+  for (const t of tags) {
+    const text = t.body.trim();
+    if (startKinds.includes(t.kind)) {
+      open.push(t);
+    } else if (t.kind === "else") {
+      const top = open.at(-1);
+      if ((!top || (top.kind !== "cs" && top.kind !== "cr")) && !inCell) {
+        issue(t, `Unmatched ending tag "${text}"`);
+      }
+    } else if (t.kind === endKind) {
+      const top = open.pop();
+      if (!top) {
+        issue(t, `Unmatched ending tag "${text}"`);
+      } else {
+        const bad = sectionEnd(top, t);
+        if (bad) {
+          issue(t, bad);
+        }
+      }
+    } else if (!row && !inCell) {
+      issue(t, `This table-specific field is not inside a table  Suggestion 1:Did you mean "${text.replace(/^(c|r|e)r_/i, "$1s_")}"? `);
+    }
+  }
+  for (const t of open) {
+    issue(t, `Section not ended. Name: ${t.body.trim()}  Suggestion 1:Make sure section "${t.body.trim()}" is ended. `, t.f.start);
+  }
+}
+
+function listTags(children: XNode[]): Tag[] {
+  const tags: Tag[] = [];
+  for (const c of children) {
+    if (c.kind === "el" && !c.dead && c.name === "w:p") {
+      const para = paraOf(c);
+      for (const f of para.found) {
+        const k = f.ins.kind;
+        if (k === "cs" || k === "rs" || k === "es" || k === "else" || k === "cr" || k === "rr" || k === "er") {
+          tags.push({ kind: k, body: f.body, para, f });
+        }
+      }
+    }
+  }
+  return tags;
+}
+
+/** Counts brackets outside quotes: true when an opening bracket is never closed. */
+function unclosedBracket(expr: string): boolean {
+  let depth = 0;
+  let quote = "";
+  for (const ch of expr) {
+    if (quote) {
+      quote = ch === quote ? "" : quote;
+    } else if ("'\"".includes(ch)) {
+      quote = ch;
+    } else if (ch === "‘" || ch === "“") {
+      quote = ch === "‘" ? "’" : "”";
+    } else if (ch === "(") {
+      depth++;
+    } else if (ch === ")") {
+      depth--;
+    }
+  }
+  return depth > 0;
+}
+
+function expressionIssues(children: XNode[], issues: Issue[]): void {
+  for (const c of children) {
+    if (c.kind === "el" && !c.dead && c.name === "w:p") {
+      const para = paraOf(c);
+      for (const f of para.found) {
+        const expr = f.body
+          .trim()
+          .replace(/^(?:[a-z]{2}_|op:)\s*/i, "")
+          .replace(/^\{([\s\S]*)\}$/, "$1");
+        if (f.ins.kind !== "comment" && f.ins.kind !== "unsupported" && unclosedBracket(expr)) {
+          issues.push({ para, el: c, reason: `Expression error for [${straighten(expr)}]:Function is not closed.`, at: 0 });
+        }
+      }
+    }
+  }
+}
+
+function analyseList(children: XNode[], ctx: Ctx, issues: Issue[], inCell = false): void {
+  checkTags(listTags(children), false, issues, inCell);
+  expressionIssues(children, issues);
+  for (const c of children) {
+    if (c.kind !== "el" || c.dead) {
+      continue;
+    }
+    if (c.name === "w:tbl") {
+      analyseTable(c, ctx, issues);
+    } else if (c.name === "w:sdt") {
+      for (const content of childEls(c, "w:sdtContent")) {
+        analyseList(content.children, ctx, issues);
+      }
+    } else if (c.name === "w:p") {
+      const para = paraOf(c);
+      for (const s of para.segs) {
+        if (s.node && !s.el.dead && (s.el.name === "w:drawing" || s.el.name === "w:pict" || s.el.name === "mc:AlternateContent" || s.el.name === "w:object")) {
+          for (const box of findDescendants(s.el, "w:txbxContent")) {
+            analyseList(box.children, ctx, issues);
+          }
+        }
+      }
+    }
+  }
+}
+
+function analyseTable(tbl: XEl, ctx: Ctx, issues: Issue[]): void {
+  const tags: Tag[] = [];
+  tbl.children.forEach((c, idx) => {
+    if (c.kind !== "el" || c.dead || c.name !== "w:tr") {
+      return;
+    }
+    const rowTags = rowMarkers(c, idx, ctx).map((m) => ({
+      kind: m.kind,
+      body: m.text,
+      para: m.para,
+      f: { start: m.start, end: m.end, body: m.text, ins: m.ins }
+    }));
+    const rowOnly = rowTags.filter((t) => t.kind === "cr" || t.kind === "rr" || t.kind === "er");
+    for (const extra of rowOnly.slice(1)) {
+      issues.push({
+        para: extra.para,
+        el: extra.para.el,
+        reason: `Tag "${extra.body.trim()}" can't exist in the same table row as another "rr_xxx", "cr_xxx" or "er_xxx" tag.`,
+        at: extra.f.start
+      });
+    }
+    tags.push(...rowOnly.slice(0, 1), ...rowTags.filter((t) => t.kind === "else"));
+    for (const cell of childEls(c, "w:tc")) {
+      analyseList(cell.children, ctx, issues, true);
+    }
+  });
+  checkTags(tags, true, issues);
+}
+
+/** Docmosis rejects a template whose blocks don't pair up before merging anything; in devMode it marks each fault and leaves the text alone. */
+function analyse(container: XEl, ctx: Ctx): Issue[] {
+  const issues: Issue[] = [];
+  analyseList(container.children, ctx, issues);
+  const unclosed = (i: Issue): boolean => i.reason.startsWith("Section not ended");
+  const reported = issues.some((i) => !unclosed(i)) ? issues.filter((i) => !unclosed(i)) : issues;
+  return reported.sort((a, b) => a.el.ord - b.el.ord);
+}
+
+function reportIssues(issues: Issue[], ctx: Ctx): void {
+  const seen = new Set<Issue["para"]>();
+  for (const i of issues) {
+    ctx.messages.push(`${i.reason.trim()} (${ctx.part}, paragraph ${i.el.ord})`);
+    if (ctx.devMode && i.para.segs.length > 0) {
+      i.para.insert(i.at, ctx.body ? `<<analysis>>Docmosis${++ctx.counter.n}` : `<<analysis>>${i.reason} `);
+      seen.add(i.para);
+    }
+  }
+  for (const p of seen) {
+    p.apply();
+  }
+}
+
+export function renderPart(xml: string, part: string, scope: Scope, devMode: boolean, messages: string[], counter: { n: number } = { n: 0 }): string {
   const doc = parseXml(xml);
   const root = childEls(doc)[0];
   if (!root) {
     return xml;
   }
   const container = root.name === "w:document" ? (childEls(root, "w:body")[0] ?? root) : root;
-  const ctx: Ctx = { devMode, messages, part, epoch: 0 };
+  const ctx: Ctx = { devMode, messages, part, epoch: 0, counter, body: part === "word/document.xml" };
+  const issues = analyse(container, ctx);
+  if (issues.length > 0) {
+    reportIssues(issues, ctx);
+    return serializeXml(doc);
+  }
   container.children = processList(container.children, scope, ctx);
   return serializeXml(doc);
 }

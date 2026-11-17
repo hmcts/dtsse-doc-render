@@ -1,5 +1,10 @@
 import { type Instruction, parseInstruction } from "./expr.ts";
-import { encodeText, makeEl, makeText, textOf, type XEl } from "./xml.ts";
+import { cloneEl, encodeText, makeEl, makeText, textOf, type XEl } from "./xml.ts";
+
+/** A paragraph break inserted by a value. A `\n` in an inserted value ends the paragraph; the next one copies the paragraph properties. */
+export const SPLIT = "dr:split";
+/** Inserted-value characters: `\n` ends the paragraph, `\v` is a line break, `\f` ends the paragraph and the next one has default properties. */
+const SEPARATOR = /(\r\n|\n|\r|\v|\f)/;
 
 /** Stands in for a non-text run child (tab, break, drawing, field character) in a paragraph's joined text. */
 export const NODE_CHAR = "\uFFFC";
@@ -102,6 +107,13 @@ function setText(el: XEl, text: string): void {
   el.open = /xml:space=/.test(el.open) ? el.open.replace(/xml:space="[^"]*"/, 'xml:space="preserve"') : el.open.replace(/\s*\/?>$/, ' xml:space="preserve">');
 }
 
+function separatorEl(sep: string): XEl {
+  if (sep === "\v") {
+    return makeEl("w:br", "<w:br/>", [], true);
+  }
+  return makeEl(SPLIT, sep === "\f" ? "<dr:split plain/>" : "<dr:split/>", [], true);
+}
+
 function markRun(el: XEl): void {
   if (el.parent?.name === "w:r") {
     el.parent.dirty = true;
@@ -179,7 +191,7 @@ export class Para {
         }
         continue;
       }
-      const lines: string[] = [];
+      const parts: (string | XEl)[] = [];
       let cur = "";
       let from = -1;
       const flush = (to: number): void => {
@@ -192,11 +204,11 @@ export class Para {
         const add = s.ins?.get(k);
         if (add !== undefined) {
           flush(k);
-          const pieces = add.split(/\r\n|\n|\r/);
-          cur += pieces[0];
-          for (let j = 1; j < pieces.length; j++) {
-            lines.push(cur);
-            cur = pieces[j]!;
+          const bits = add.split(SEPARATOR);
+          cur += bits[0];
+          for (let j = 1; j < bits.length; j += 2) {
+            parts.push(cur, separatorEl(bits[j]!));
+            cur = bits[j + 1]!;
           }
         }
         if (s.dead?.[k]) {
@@ -206,9 +218,10 @@ export class Para {
         }
       }
       flush(s.len);
-      lines.push(cur);
-      content ||= lines.some((l) => /\S/.test(l));
-      if (lines.length === 1) {
+      parts.push(cur);
+      const texts = parts.filter((x): x is string => typeof x === "string");
+      content ||= texts.some((l) => /\S/.test(l));
+      if (parts.length === 1) {
         if (cur === "") {
           s.el.dead = true;
           markRun(s.el);
@@ -219,12 +232,16 @@ export class Para {
       }
       const parent = s.el.parent!;
       const at = parent.children.indexOf(s.el);
-      const made = lines.flatMap((line, j) => {
-        const t = line === "" ? [] : [makeEl("w:t", "<w:t>", [], false)];
-        for (const e of t) {
-          setText(e, line);
+      const made = parts.flatMap((part) => {
+        if (typeof part !== "string") {
+          return [part];
         }
-        return j < lines.length - 1 ? [...t, makeEl("w:br", "<w:br/>", [], true)] : t;
+        if (part === "") {
+          return [];
+        }
+        const t = makeEl("w:t", "<w:t>", [], false);
+        setText(t, part);
+        return [t];
       });
       for (const e of made) {
         e.parent = parent;
@@ -246,4 +263,111 @@ export function paraOf(el: XEl): Para {
   const p = new Para(el);
   el.cache = p;
   return p;
+}
+
+/** Removes one trailing space from the last text in a paragraph element. Used when a seam is closed across fragments. */
+export function trimTrailingSpace(el: XEl): void {
+  const texts: XEl[] = [];
+  const walk = (e: XEl): void => {
+    for (const c of e.children) {
+      if (c.kind === "el" && !c.dead && c.name !== "w:p" && c.name !== "w:pPr" && c.name !== "w:rPr") {
+        if (c.name === "w:t") {
+          texts.push(c);
+        } else {
+          walk(c);
+        }
+      }
+    }
+  };
+  walk(el);
+  for (let i = texts.length - 1; i >= 0; i--) {
+    const t = texts[i]!;
+    const str = textOf(t);
+    if (str === "") {
+      continue;
+    }
+    if (str.endsWith(" ")) {
+      if (str.length === 1) {
+        t.dead = true;
+        markRun(t);
+      } else {
+        setText(t, str.slice(0, -1));
+      }
+    }
+    return;
+  }
+}
+
+function findSplit(el: XEl, chain: XEl[]): boolean {
+  for (const c of el.children) {
+    if (c.kind !== "el" || c.dead || c.name === "w:p") {
+      continue;
+    }
+    chain.push(c);
+    if (c.name === SPLIT || findSplit(c, chain)) {
+      return true;
+    }
+    chain.pop();
+  }
+  return false;
+}
+
+/** Splits a paragraph at each paragraph break a value inserted. The new paragraph copies `w:pPr` unless the break asked for default properties. */
+export function splitAtBreaks(p: XEl): XEl[] {
+  const out: XEl[] = [];
+  let cur = p;
+  for (;;) {
+    const chain: XEl[] = [cur];
+    if (!findSplit(cur, chain)) {
+      out.push(cur);
+      return out;
+    }
+    const mark = chain.pop()!;
+    let right: XEl | null = null;
+    for (let i = chain.length - 1; i >= 0; i--) {
+      const node = chain[i]!;
+      const deepest = i === chain.length - 1;
+      const child = deepest ? mark : chain[i + 1]!;
+      const after = node.children.splice(node.children.indexOf(child) + (deepest ? 0 : 1));
+      if (deepest) {
+        after.shift();
+      }
+      const lead = node.children.filter((c): c is XEl => c.kind === "el" && (c.name === "w:rPr" || (c.name === "w:pPr" && !mark.open.includes("plain"))));
+      const copy = makeEl(node.name, node.open, [...lead.map((c) => cloneEl(c)), ...(right ? [right] : []), ...after], node.selfClose);
+      copy.ord = node.ord;
+      right = copy;
+    }
+    out.push(cur);
+    cur = right!;
+  }
+}
+
+/** Docmosis ends the paragraph after a page break that has more content after it; the rest goes in a new paragraph. */
+export function splitAfterPageBreaks(el: XEl): void {
+  const items: { el: XEl; pageBreak: boolean }[] = [];
+  const walk = (e: XEl): void => {
+    for (const c of e.children) {
+      if (c.kind !== "el" || c.dead || SKIP.has(c.name)) {
+        continue;
+      }
+      if (c.name === "w:t") {
+        if (textOf(c) !== "") {
+          items.push({ el: c, pageBreak: false });
+        }
+      } else if (LEAF.has(c.name)) {
+        items.push({ el: c, pageBreak: c.name === "w:br" && c.open.includes('w:type="page"') });
+      } else {
+        walk(c);
+      }
+    }
+  };
+  walk(el);
+  items.forEach((item, i) => {
+    if (item.pageBreak && i < items.length - 1 && item.el.parent) {
+      const at = item.el.parent.children.indexOf(item.el);
+      const mark = makeEl(SPLIT, "<dr:split/>", [], true);
+      mark.parent = item.el.parent;
+      item.el.parent.children.splice(at + 1, 0, mark);
+    }
+  });
 }
