@@ -1,0 +1,20 @@
+s1 b
+s2   b
+s3  b
+s4    b
+s5 b
+s6 b
+s7b
+s8 b
+s9 x b
+s10   b
+s11  b
+s12 b
+s13
+s14
+s15 b
+s16 b
+s17 N b
+s18 b
+s19 b
+s20 N b

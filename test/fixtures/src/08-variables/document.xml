@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$rowNum=0&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$greeting={'Dear'}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$title={titleCase(person)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$greeting&gt;&gt; &lt;&lt;$title&gt;&gt;,</w:t></w:r></w:p>
+    <w:tbl>
+      <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
+      <w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">No.</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">Item</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;rr_lines&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;$rowNum={round($rowNum+1)}&gt;&gt;&lt;&lt;$rowNum&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;text&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;er_lines&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+    </w:tbl>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$count=0&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;rs_names&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$count={round($count+1)}&gt;&gt;&lt;&lt;$count&gt;&gt;. &lt;&lt;$this&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_names&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Rows in table: &lt;&lt;$rowNum&gt;&gt;, names counted: &lt;&lt;$count&gt;&gt;.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$ref=word&gt;&gt;&lt;&lt;$lit={'word'}&gt;&gt;&lt;&lt;$limit=5&gt;&gt;Reference: [&lt;&lt;$ref&gt;&gt;] literal: [&lt;&lt;$lit&gt;&gt;] number: [&lt;&lt;$limit&gt;&gt;]</w:t></w:r></w:p>
+  </w:body>
+</w:document>

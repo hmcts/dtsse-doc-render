@@ -1,9 +1,20 @@
 import { createServer } from "node:http";
-import { handleRequest } from "./app.ts";
+import { createHandler } from "./app.ts";
+import { type ConvertTarget, converterReady, convertTo, convertToPdf } from "./convert.ts";
+import { mergeDocx } from "./merge/index.ts";
 
 const port = Number(process.env.PORT ?? 8080);
 
-const server = createServer(handleRequest);
+const handler = createHandler({
+  merge: mergeDocx,
+  convert: convertToPdf,
+  convertTo: (document, sourceExtension, targetFormat) => convertTo(document, sourceExtension, targetFormat as ConvertTarget),
+  ready: converterReady
+});
+
+const server = createServer((request, response) => {
+  void handler(request, response);
+});
 
 server.listen(port, () => {
   console.log(`dtsse-doc-render listening on ${port}`);

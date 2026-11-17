@@ -1,0 +1,11 @@
+{
+  "status": "pending",
+  "other": "a b",
+  "party": "Smith & Jones <Solicitors> Ltd",
+  "condition": "if a < b && b > c",
+  "address": {
+    "line1": "1 High Street",
+    "line2": "Leeds",
+    "postcode": "LS1 1AA"
+  }
+}

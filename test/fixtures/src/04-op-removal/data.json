@@ -1,0 +1,9 @@
+{
+  "recipient": "Mr Bob Jones",
+  "yourRef": "",
+  "ourRef": "AB/123",
+  "caseNumber": null,
+  "contact": {
+    "email": "bob@example.com"
+  }
+}

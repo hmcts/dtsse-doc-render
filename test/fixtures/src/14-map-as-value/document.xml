@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Map: [&lt;&lt;address&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">List: [&lt;&lt;tags&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Map in expression: [&lt;&lt;{address}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Map is blank: &lt;&lt;{isBlank(address)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">List is blank: &lt;&lt;{isBlank(tags)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Map or fallback: &lt;&lt;{ifBlank(address,‘none’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Field of map: &lt;&lt;address.town&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">op map: &lt;&lt;op:address&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Kept line.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{address = null}&gt;&gt;Map equals null.&lt;&lt;else&gt;&gt;Map not null.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

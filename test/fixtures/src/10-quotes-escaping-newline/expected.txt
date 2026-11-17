@@ -1,0 +1,11 @@
+Awaiting response from Smith & Jones <Solicitors> Ltd.
+Mixed quotes match.
+Party: Smith & Jones <Solicitors> Ltd
+Condition: if a < b && b > c
+Address:
+Literal break\nsecond line
+Line one
+Line two
+1 High Street
+Leeds
+LS1 1AA

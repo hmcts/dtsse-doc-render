@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Dear &lt;&lt;recipient&gt;&gt;,</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">We write about claim &lt;&lt;claimNumber&gt;&gt;.</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{urgent}&gt;&gt;This matter is urgent.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:sectPr><w:headerReference w:type="default" r:id="rId2"/></w:sectPr>
+  </w:body>
+</w:document>

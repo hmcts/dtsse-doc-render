@@ -1,0 +1,15 @@
+{
+  "hearingDate": "2026-03-15",
+  "hearingDateTime": "2026-03-15 10:30",
+  "party": {
+    "name": "jane smith",
+    "nickname": "",
+    "flag": "YES",
+    "shout": "LOUD NAME"
+  },
+  "items": ["a", "b", "c"],
+  "claim": {
+    "no": "K1AB2345"
+  },
+  "amount": 1234.5
+}

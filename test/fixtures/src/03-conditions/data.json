@@ -1,0 +1,12 @@
+{
+  "claim": {
+    "type": "damages",
+    "isDamages": true,
+    "amount": 1500,
+    "interestClaimed": true,
+    "hasSolicitor": false,
+    "status": "issued"
+  },
+  "isCorporate": false,
+  "stringFalse": "false"
+}

@@ -1,26 +1,10 @@
 #!groovy
 
-@Library("Infrastructure")
+@Library("Infrastructure@2.13.6")
 
 def type = "nodejs"
 def product = "dtsse"
 def component = "doc-render"
 
-static Map<String, Object> secret(String secretName, String envVariable) {
-  [
-    $class: 'AzureKeyVaultSecret',
-    secretType: 'Secret',
-    name: secretName,
-    envVariable: envVariable
-  ]
-}
-
-def secrets = [
-  'dtsse-${env}': [
-    secret('AppInsightsConnectionString', 'APPLICATIONINSIGHTS_CONNECTION_STRING')
-  ]
-]
-
 withPipeline(type, product, component) {
-  loadVaultSecrets(secrets)
 }

@@ -1,0 +1,9 @@
+Map: []
+List: []
+Map in expression: []
+Map is blank: true
+List is blank: true
+Map or fallback: none
+Field of map: Leeds
+Kept line.
+Map equals null.

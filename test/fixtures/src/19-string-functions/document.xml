@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Trim: [&lt;&lt;{trim(padded)}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Trim of blank: [&lt;&lt;{trim(blank)}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Substring: [&lt;&lt;{substring(padded,2,5)}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Substring of word: [&lt;&lt;{substring(word,3,6)}&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Length: &lt;&lt;{length(word)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Length formatted: &lt;&lt;{numFormat(length(padded),‘0’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Length of list: &lt;&lt;{length(list)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Long word: &lt;&lt;cs_{length(word) &gt; 5}&gt;&gt;yes&lt;&lt;else&gt;&gt;no&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Chained: [&lt;&lt;{toUpperCase(trim(padded))}&gt;&gt;]</w:t></w:r></w:p>
+  </w:body>
+</w:document>

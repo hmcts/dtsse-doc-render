@@ -1,0 +1,9 @@
+Trim: [Hi there]
+Trim of blank: []
+Substring: [Hi ]
+Substring of word: [def]
+Length: 8.0
+Length formatted: 12
+Length of list: 0.0
+Long word: yes
+Chained: [HI THERE]

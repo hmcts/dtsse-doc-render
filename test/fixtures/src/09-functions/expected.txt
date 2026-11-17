@@ -1,0 +1,16 @@
+Hearing date: 15 March 2026
+Hearing day: Sunday
+Hearing time: 10:30 AM
+Numeric: 15/03/2026
+Generated today.
+Name: Jane Smith
+Upper: JANE SMITH
+Lower: loud name
+Nickname: None
+Name or nickname: JANE SMITH
+Blank check: no nickname, has name.
+Case-insensitive: matches
+Items: 3 and 3
+More than two items.
+Sum: 4 and Case K1AB2345
+Amount: 1,234.50

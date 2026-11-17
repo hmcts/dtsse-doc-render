@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Dear &lt;&lt;recipient&gt;&gt;,</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Your reference: &lt;&lt;op:yourRef&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Our reference: &lt;&lt;op:ourRef&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Case number: &lt;&lt;op:caseNumber&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Telephone: &lt;&lt;op:contact.phone&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Email: &lt;&lt;op:contact.email&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Yours faithfully,</w:t></w:r></w:p>
+  </w:body>
+</w:document>

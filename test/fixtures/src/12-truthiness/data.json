@@ -1,0 +1,15 @@
+{
+  "boolTrue": true,
+  "strTrue": "true",
+  "strYes": "yes",
+  "numOne": 1,
+  "numZero": 0,
+  "strFalse": "false",
+  "empty": "",
+  "nothing": null,
+  "map": {
+    "k": 1
+  },
+  "list": [1, 2],
+  "emptyList": []
+}

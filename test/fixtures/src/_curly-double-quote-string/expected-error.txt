@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<status = “A”>> Error in expression:com.docmosis.template.TemplateParseException: Field term "“A”" must start with an Alphabetic letter or $ Suggestion1:Make sure your field has no spaces.  Suggestion 1:Correct the expression 

@@ -1,0 +1,4 @@
+Before.
+Item | Amount
+<<rr_items>><<name>> | <<amount>><<analysis>>Docmosis1<<er_items>>
+After.
