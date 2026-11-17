@@ -274,8 +274,15 @@ describe("render", () => {
     const response = await json(base, "/rs/render", { templateName: "T.docx" });
     expect(response.status).toBe(400);
     const body = await read(response);
-    expect(body.shortMsg).toBe("Render failed: bad template");
+    expect(body.shortMsg).toBe("row 1: no end tag");
     expect(body.longMsg).toBe("bad template\nrow 1: no end tag\nrow 2: unknown field");
+  });
+
+  it("uses the error message as shortMsg when a MergeError has no details", async () => {
+    const merge = vi.fn().mockRejectedValue(new MergeError("bad template"));
+    const { base } = await start({ merge });
+    const body = await read(await json(base, "/rs/render", { templateName: "T.docx" }));
+    expect(body).toEqual({ succeeded: false, shortMsg: "bad template", longMsg: "bad template" });
   });
 
   it("returns 500 for a conversion failure", async () => {
@@ -292,6 +299,129 @@ describe("render", () => {
     const response = await json(base, "/rs/render", { templateName: "T.docx" });
     expect(response.status).toBe(500);
     expect((await read(response)).shortMsg).toBe("Internal error");
+  });
+});
+
+describe("inline template", () => {
+  const zip = Buffer.concat([Buffer.from([0x50, 0x4b, 0x03, 0x04]), Buffer.from([0xfb, 0xff, 0xfe, 0x3e, 0x3f, 0x00, 0x41])]);
+  const standard = zip.toString("base64");
+  const urlSafe = zip.toString("base64url");
+  const merged = `MERGED ${zip.toString()} {"a":1} dev=false`;
+
+  it("uses bytes that differ between the two alphabets", () => {
+    expect(standard).not.toBe(urlSafe);
+  });
+
+  it.each([
+    ["standard", standard],
+    ["URL-safe without padding", urlSafe],
+    ["URL-safe with padding", urlSafe.padEnd(standard.length, "=")],
+    ["with newlines", standard.replace(/(.{4})/g, "$1\n")],
+    ["with a data URL prefix", `data:application/vnd.openxmlformats-officedocument.wordprocessingml.document;base64,${standard}`],
+    ["with a data URL prefix and CRLFs", `data:;base64,${standard.replace(/(.{4})/g, "$1\r\n")}`]
+  ])("renders templateBase64 %s on both prefixes", async (_label, templateBase64) => {
+    const { base, deps } = await start();
+    for (const path of ["/rs/render", "/api/render"]) {
+      const response = await json(base, path, { templateBase64, outputFormat: "docx", data: { a: 1 } });
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe(merged);
+    }
+    expect(deps.store.find).not.toHaveBeenCalled();
+  });
+
+  it("converts an inline template to a PDF", async () => {
+    const { base } = await start();
+    const response = await json(base, "/rs/render", { templateBase64: standard, data: { a: 1 } });
+    expect(response.headers.get("content-type")).toBe("application/pdf");
+    expect(await response.text()).toBe(`PDF(docx) ${merged}`);
+  });
+
+  it("renders a multipart templateFile with data as a field", async () => {
+    const { base, deps } = await start();
+    const body = new FormData();
+    body.append("templateFile", new Blob([zip]), "T.docx");
+    body.append("data", '{"a":1}');
+    body.append("outputFormat", "docx");
+    const response = await fetch(`${base}/api/render`, { method: "POST", body });
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe(merged);
+    expect(deps.store.find).not.toHaveBeenCalled();
+  });
+
+  it("renders a multipart templateFile with data as a file part", async () => {
+    const { base } = await start();
+    const body = new FormData();
+    body.append("templateFile", new Blob([zip]), "T.docx");
+    body.append("data", new Blob(['{"a":1}'], { type: "application/json" }), "payload.json");
+    body.append("outputFormat", "docx");
+    const response = await fetch(`${base}/rs/render`, { method: "POST", body });
+    expect(await response.text()).toBe(merged);
+  });
+
+  it("prefers the inline template over a templateName and never touches the store", async () => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", { templateName: "T.docx", templateBase64: standard, outputFormat: "docx", data: { a: 1 } });
+    expect(await response.text()).toBe(merged);
+    expect(deps.store.find).not.toHaveBeenCalled();
+    expect(deps.store.save).not.toHaveBeenCalled();
+    expect(deps.store.list).not.toHaveBeenCalled();
+  });
+
+  it("does not validate or look up templateName when a template is inline", async () => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", { templateName: "../x.docx", templateBase64: standard, outputFormat: "docx" });
+    expect(response.status).toBe(200);
+    expect(deps.store.find).not.toHaveBeenCalled();
+  });
+
+  it.each(["not base64!", "A", "   ", "data:;base64,"])("returns 400 for bad base64 %j", async (templateBase64) => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", { templateBase64 });
+    expect(response.status).toBe(400);
+    expect((await read(response)).shortMsg).toMatch(/templateBase64|Missing templateName/);
+    expect(deps.merge).not.toHaveBeenCalled();
+  });
+
+  it("names the template in the base64 error", async () => {
+    const { base } = await start();
+    const response = await json(base, "/rs/render", { templateName: "Mine.docx", templateBase64: "@@@@" });
+    const body = await read(response);
+    expect(response.status).toBe(400);
+    expect(body).toMatchObject({ succeeded: false, shortMsg: "Invalid templateBase64" });
+    expect(body.longMsg).toContain("Mine.docx");
+  });
+
+  it("returns 400 when templateBase64 is not a string", async () => {
+    const { base } = await start();
+    const response = await json(base, "/rs/render", { templateBase64: 5 });
+    expect(response.status).toBe(400);
+    expect((await read(response)).shortMsg).toBe("Invalid templateBase64");
+  });
+
+  it("returns 400 when the decoded bytes are not a zip", async () => {
+    const { base, deps } = await start();
+    const response = await json(base, "/rs/render", { templateBase64: Buffer.from("hello world").toString("base64") });
+    expect(response.status).toBe(400);
+    expect(await read(response)).toMatchObject({ succeeded: false, shortMsg: "Invalid template" });
+    expect(deps.merge).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when a multipart templateFile is not a zip", async () => {
+    const { base } = await start();
+    const body = new FormData();
+    body.append("templateFile", new Blob(["plain text"]), "T.docx");
+    const response = await fetch(`${base}/rs/render`, { method: "POST", body });
+    expect(response.status).toBe(400);
+    expect((await read(response)).shortMsg).toBe("Invalid template");
+  });
+
+  it("enforces the access key for inline templates", async () => {
+    const { base, deps } = await start({ accessKey: "secret" });
+    const denied = await json(base, "/rs/render", { templateBase64: standard });
+    expect(denied.status).toBe(401);
+    expect(deps.merge).not.toHaveBeenCalled();
+    const allowed = await json(base, "/rs/render", { templateBase64: standard, accessKey: "secret", outputFormat: "docx", data: { a: 1 } });
+    expect(allowed.status).toBe(200);
   });
 });
 

@@ -26,10 +26,42 @@ Every `/rs/*` endpoint is also served under `/api/*`. Errors are `{"succeeded":f
 | `GET /rs/status` | `{"ready":<LibreOffice available>,...}` |
 | `GET /rs/ping` | 200 |
 | `POST /rs/render` | JSON, form or multipart `{accessKey, templateName, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx |
+| `POST /rs/render` (inline template) | As above, with `templateBase64` (JSON) or a multipart `templateFile` instead of `templateName`; see [Render a template in one request](#render-a-template-in-one-request) |
 | `POST /rs/convert` | multipart `file`, `outputName`, `accessKey`; returns a PDF |
 | `GET/POST /api/listTemplates` | `{"succeeded":true,"templateList":[{"name":...}]}` |
 | `POST /api/uploadTemplate` | multipart `templateName` and `file` (or `templateFile`) |
 | `/api/getTemplateStructure`, `/api/getSampleData` | 501 |
+
+### Render a template in one request
+
+`/rs/render` and `/api/render` also accept the template itself, so a tester needs no upload step. The template is used for that request only and is never written to the store. This is an extension of dtsse-doc-render, so use it only against this service.
+
+- JSON: `templateBase64` holds the .docx bytes as base64. Standard and URL-safe alphabets both work, whitespace and newlines are ignored, and a `data:...;base64,` prefix is accepted.
+- Multipart: a `templateFile` part carries the raw .docx bytes. `data` can be a plain field or a file part.
+- When an inline template is given, `templateName` is optional and is used only as the name in error messages; it is never looked up in the store.
+- Bytes that are not valid base64, or that do not start with the zip signature (`PK\x03\x04`), return 400.
+- The access key goes in as `accessKey` where one is set (a body field, a form field or a query parameter), as for the other endpoints.
+- Base64 makes the request about 33% larger than the .docx, and the 50 MB body limit applies to the whole request. Use the multipart form for templates over roughly 35 MB.
+
+JSON:
+
+```sh
+curl -s localhost:8080/api/render -H 'content-type: application/json' \
+  -d "$(jq -n --arg t "$(base64 -w0 T.docx)" --slurpfile d payload.json '{templateBase64:$t, outputFormat:"pdf", data:$d[0]}')" -o out.pdf
+```
+
+macOS `base64` has no `-w0`; use `base64 -i T.docx` instead (it does not wrap lines). Add `accessKey:"..."` to the `jq` object where a key is set.
+
+Multipart:
+
+```sh
+curl -s localhost:8080/api/render -F templateFile=@T.docx -F 'data=@payload.json;type=application/json' \
+  -F outputFormat=pdf -o out.pdf
+```
+
+Add `-F accessKey=...` where a key is set.
+
+Render failures return HTTP 400 as Docmosis does, with the first problem in `shortMsg` and every problem in `longMsg`.
 
 ## Configuration
 
