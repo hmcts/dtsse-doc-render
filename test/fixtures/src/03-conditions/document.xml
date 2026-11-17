@@ -13,9 +13,9 @@
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;else&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">The claim status is unknown.</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
-    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_claim.type&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_claim.isDamages&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">Type of claim: &lt;&lt;claim.type&gt;&gt;</w:t></w:r></w:p>
-    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_claim&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_claim.isDamages&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{claim.amount &gt; 1000 &amp;&amp; claim.amount &lt; 5000}&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">This is a fast track claim.</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>

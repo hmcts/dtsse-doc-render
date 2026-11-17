@@ -1,0 +1,2 @@
+status: 400
+shortMsg: Task failed:Field <<analysis>> Tag "er_items" can't exist in the same table row as another "rr_xxx", "cr_xxx" or "er_xxx" tag.

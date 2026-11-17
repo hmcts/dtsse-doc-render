@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Literal: &lt;&lt;{dateFormat(stamp,‘d MMM yyyy ’at’ HH:mm’,‘yyyy-MM-dd’T’HH:mm:ss’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Quoted T in input: &lt;&lt;{dateFormat(stamp,‘yyyy’,‘yyyy-MM-dd’T’HH:mm:ss’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Colon: &lt;&lt;{dateFormat(stamp,‘HH’:‘mm’,‘yyyy-MM-dd’T’HH:mm:ss’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Date only: &lt;&lt;{dateFormat(day,‘EEEE, d MMMM yyyy’,‘yyyy-MM-dd’)}&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Now year: &lt;&lt;{dateFormat($nowUTC,‘yyyy’) != ‘’}&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

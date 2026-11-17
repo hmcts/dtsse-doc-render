@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">s1 &lt;&lt;empty&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s2  &lt;&lt;empty&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s3 &lt;&lt;empty&gt;&gt;  b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s4  &lt;&lt;empty&gt;&gt;  b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s5&lt;&lt;empty&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s6 &lt;&lt;empty&gt;&gt;b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s7&lt;&lt;empty&gt;&gt;b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s8 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s9 &lt;&lt;cs_t&gt;&gt;x&lt;&lt;es_&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s10  &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s11 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt;  b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s12 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt;b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s13 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt; s14</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s15 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;else&gt;&gt;&lt;&lt;es_&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s16 &lt;&lt;cs_f&gt;&gt;x&lt;&lt;es_&gt;&gt; &lt;&lt;cs_f&gt;&gt;y&lt;&lt;es_&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s17 &lt;&lt;name&gt;&gt; &lt;&lt;empty&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s18 &lt;&lt;$v=1&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s19 &lt;&lt;$v=1&gt;&gt;&lt;&lt;$w=2&gt;&gt; b</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">s20 &lt;&lt;name&gt;&gt; b</w:t></w:r></w:p>
+  </w:body>
+</w:document>

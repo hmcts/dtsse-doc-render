@@ -1,0 +1,3 @@
+Before.
+<<analysis>>Docmosis1Name <<{toUpperCase(status}>> here
+After.

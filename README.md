@@ -73,4 +73,28 @@ TEMPLATES_DIR=/path/to/docmosis/Templates TEMPLATE_ENV=AAT docker compose up --b
 
 ## Remote tests
 
-`TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance. Set `TEST_ACCESS_KEY` when the target enforces one. The functional suite renders every fixture in `test/fixtures/src/<name>/` (a `document.xml`, `data.json` and the `expected.txt` merged text) as docx and PDF. After editing a fixture, run `node test/fixtures/build.mjs` to rebuild the committed `.docx` files.
+`TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance. Set `TEST_ACCESS_KEY` when the target enforces one.
+
+The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header).
+- A merge fixture has an `expected.txt`, the merged text. The functional suite renders it as docx and PDF.
+- A fixture whose name starts with `_` is one Docmosis rejects. It has an `error-phrase.txt` (hand-written: the phrase a rejection message must contain), `expected-error.txt` (Docmosis's status and message) and `expected-devmode.txt` (the document with the errors written in place). The functional suite checks the status and the phrase, and that devMode writes `Docmosis<N>` markers.
+
+After editing a fixture, run `node test/fixtures/build.mjs` to rebuild the committed `.docx` files, then `node test/parity/capture.mjs` against a licensed Docmosis to rewrite the expected files. Read the diff of every `expected.txt`: if the output is not what the fixture is meant to show, fix the fixture.
+
+## Checking parity with Docmosis
+
+`test/parity/` compares this service with a licensed Docmosis. It is for local use and is not part of CI.
+
+1. Start a licensed Docmosis from the workspace: `docmosis local start`. It listens on `http://127.0.0.1:18087` in the container `docmosis-local`.
+2. Start this service: `docker compose up --build`, which listens on `http://localhost:8080`.
+3. Point the scripts at both. The Docmosis access key is read from the container's `DOCMOSIS_ACCESSKEY` unless `DOCMOSIS_ACCESS_KEY` is set.
+
+```
+export DOCMOSIS_URL=http://127.0.0.1:18087   # DOCMOSIS_CONTAINER=docmosis-local, DOCMOSIS_ACCESS_KEY optional
+export DR_URL=http://localhost:8080          # DR_ACCESS_KEY if the service enforces one
+node test/parity/compare.mjs                 # every fixture on both, diffs printed; or name fixtures
+node test/parity/templates.mjs <hmcts/docmosis>/Templates/Base CV-UNS-DEC-ENG-01133 FL-PRL-APP-ENG-FL401-draft
+node test/parity/capture.mjs                 # rewrite expected files from Docmosis
+```
+
+`compare.mjs` prints `same` or `DIFF` per fixture and exits 1 on any difference. `templates.mjs` generates sample data for real templates, renders each on both with devMode on and writes the data, both texts and a diff to a directory it prints. Docmosis caches templates by file mtime, so every upload uses a fresh name; the scripts do this themselves.

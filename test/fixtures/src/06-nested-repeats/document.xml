@@ -9,7 +9,7 @@
     <w:p><w:r><w:t xml:space="preserve">Role: &lt;&lt;role&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;rs_representatives&gt;&gt;</w:t></w:r></w:p>
-    <w:p><w:r><w:t xml:space="preserve">Represented by &lt;&lt;$this&gt;&gt; for &lt;&lt;name&gt;&gt; (&lt;&lt;$itemnum&gt;&gt;/&lt;&lt;$size&gt;&gt;)</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Represented by &lt;&lt;$this&gt;&gt; for &lt;&lt;$parent.name&gt;&gt; (&lt;&lt;$itemnum&gt;&gt;/&lt;&lt;$size&gt;&gt;)</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_representatives&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{representatives.size() = 0}&gt;&gt;</w:t></w:r></w:p>
     <w:p><w:r><w:t xml:space="preserve">Unrepresented</w:t></w:r></w:p>

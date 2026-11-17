@@ -6,9 +6,15 @@
       <w:tblPr><w:tblW w:w="0" w:type="auto"/></w:tblPr>
       <w:tblGrid><w:gridCol w:w="4500"/><w:gridCol w:w="4500"/></w:tblGrid>
       <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">Description</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">Amount</w:t></w:r></w:p></w:tc></w:tr>
-      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;rr_items&gt;&gt;&lt;&lt;description&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;amount&gt;&gt;&lt;&lt;er_items&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
-      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;cr_{showTotal}&gt;&gt;Total</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;total&gt;&gt;&lt;&lt;er_&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
-      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;cr_{showNotes}&gt;&gt;Notes</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;notes&gt;&gt;&lt;&lt;er_&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;rr_items&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;description&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;amount&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;er_items&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;cr_{showTotal}&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">Total</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;total&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;er_&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;cr_{showNotes}&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">Notes</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;notes&gt;&gt;</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t xml:space="preserve">&lt;&lt;er_&gt;&gt;</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t xml:space="preserve"></w:t></w:r></w:p></w:tc></w:tr>
     </w:tbl>
     <w:p><w:r><w:t xml:space="preserve">Fees are non-refundable.</w:t></w:r></w:p>
   </w:body>

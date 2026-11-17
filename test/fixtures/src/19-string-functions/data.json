@@ -1,0 +1,6 @@
+{
+  "padded": "  Hi there  ",
+  "blank": "   ",
+  "word": "abcdefgh",
+  "list": ["a", "b"]
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">boolTrue: &lt;&lt;cs_boolTrue&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strTrue: &lt;&lt;cs_strTrue&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strYes: &lt;&lt;cs_strYes&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">numOne: &lt;&lt;cs_numOne&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">numZero: &lt;&lt;cs_numZero&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strFalse: &lt;&lt;cs_strFalse&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">empty: &lt;&lt;cs_empty&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">nothing: &lt;&lt;cs_nothing&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">missing: &lt;&lt;cs_missing&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">map: &lt;&lt;cs_map&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">list: &lt;&lt;cs_list&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">emptyList: &lt;&lt;cs_emptyList&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strYes as expression: &lt;&lt;cs_{strYes}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">numOne as expression: &lt;&lt;cs_{numOne}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strTrue as expression: &lt;&lt;cs_{strTrue}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">map as expression: &lt;&lt;cs_{map}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">not strYes: &lt;&lt;cs_{!strYes}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">strYes = true: &lt;&lt;cs_{strYes = true}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">boolTrue = ‘true’: &lt;&lt;cs_{boolTrue = ‘true’}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">numOne = 1: &lt;&lt;cs_{numOne = 1}&gt;&gt;true&lt;&lt;else&gt;&gt;false&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>

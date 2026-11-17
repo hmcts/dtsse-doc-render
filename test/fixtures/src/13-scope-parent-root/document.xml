@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <w:body>
+    <w:p><w:r><w:t xml:space="preserve">Top title: &lt;&lt;title&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;rs_items&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Item &lt;&lt;$itemnum&gt;&gt;: &lt;&lt;n&gt;&gt; / own title [&lt;&lt;title&gt;&gt;] / parent [&lt;&lt;$parent.title&gt;&gt;] / root [&lt;&lt;$root.title&gt;&gt;] / org [&lt;&lt;$root.org.name&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{$parent.title = ‘Top’}&gt;&gt;Parent matches.&lt;&lt;else&gt;&gt;Parent differs.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;cs_{title = ‘Top’}&gt;&gt;Falls back to the outer title.&lt;&lt;else&gt;&gt;No fallback to the outer title.&lt;&lt;es_&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;rs_tags&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;$this&gt;&gt; of &lt;&lt;n&gt;&gt; (parent n [&lt;&lt;$parent.n&gt;&gt;]) root [&lt;&lt;$root.title&gt;&gt;]</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_tags&gt;&gt;</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">&lt;&lt;es_items&gt;&gt;</w:t></w:r></w:p>
+  </w:body>
+</w:document>
