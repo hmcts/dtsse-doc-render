@@ -23,25 +23,26 @@ Every `/rs/*` endpoint is also served under `/api/*`. Errors are `{"succeeded":f
 | Endpoint | Behaviour |
 | --- | --- |
 | `GET /health`, `GET /health/liveness` | `{"status":"UP"}` |
+| `GET /health/readiness` | 200 `{"status":"UP"}`, or 503 `{"status":"DOWN"}` when LibreOffice is unavailable |
 | `GET /rs/status` | `{"ready":<LibreOffice available>,...}` |
 | `GET /rs/ping` | 200 |
-| `POST /rs/render` | JSON, form or multipart `{accessKey, templateName, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx |
-| `POST /rs/render` (inline template) | As above, with `templateBase64` (JSON) or a multipart `templateFile` instead of `templateName`; see [Render a template in one request](#render-a-template-in-one-request) |
-| `POST /rs/convert` | multipart `file`, `outputName`, `accessKey`; returns a PDF |
-| `GET/POST /api/listTemplates` | `{"succeeded":true,"templateList":[{"name":...}]}` |
-| `POST /api/uploadTemplate` | multipart `templateName` and `file` (or `templateFile`) |
+| `POST /rs/render` | JSON, form or multipart `{templateBase64 or templateFile, outputName, outputFormat?, devMode?, data}`; returns the PDF or docx. `accessKey` is accepted and ignored |
+| `POST /rs/convert` | multipart `file`, `outputName`; returns a PDF |
 | `/api/getTemplateStructure`, `/api/getSampleData` | 501 |
 
-### Render a template in one request
+There is no access key and no template store. A render request with only `templateName` returns 400.
 
-`/rs/render` and `/api/render` also accept the template itself, so a tester needs no upload step. The template is used for that request only and is never written to the store. This is an extension of dtsse-doc-render, so use it only against this service.
+Output formats are `pdf` and `docx`. Docmosis also produces `doc`, `odt`, `html` and `txt`; a request for any of them here returns 400. When `outputFormat` differs from the `outputName` extension, the extension is appended to the download name, as Docmosis does. An `outputName` with no known extension and no `outputFormat` returns 400. When the conversion queue is full the service answers 503 with `Retry-After: 5`.
+
+### Send the template with the request
+
+`/rs/render` and `/api/render` take the template itself; nothing is stored. This is an extension of dtsse-doc-render, so use it only against this service.
 
 - JSON: `templateBase64` holds the .docx bytes as base64. Standard and URL-safe alphabets both work, whitespace and newlines are ignored, and a `data:...;base64,` prefix is accepted.
 - Multipart: a `templateFile` part carries the raw .docx bytes. `data` can be a plain field or a file part.
-- When an inline template is given, `templateName` is optional and is used only as the name in error messages; it is never looked up in the store.
+- `templateName` is optional and is used only as the name in error messages.
 - Bytes that are not valid base64, or that do not start with the zip signature (`PK\x03\x04`), return 400.
-- The access key goes in as `accessKey` where one is set (a body field, a form field or a query parameter), as for the other endpoints.
-- Base64 makes the request about 33% larger than the .docx, and the 50 MB body limit applies to the whole request. Use the multipart form for templates over roughly 35 MB.
+- Base64 makes the request about 33% larger than the .docx, and the 50 MB body limit applies to the whole request. Use the multipart form for templates over roughly 35 MB. A field or file over the limit returns 413.
 
 JSON:
 
@@ -50,7 +51,7 @@ curl -s localhost:8080/api/render -H 'content-type: application/json' \
   -d "$(jq -n --arg t "$(base64 -w0 T.docx)" --slurpfile d payload.json '{templateBase64:$t, outputFormat:"pdf", data:$d[0]}')" -o out.pdf
 ```
 
-macOS `base64` has no `-w0`; use `base64 -i T.docx` instead (it does not wrap lines). Add `accessKey:"..."` to the `jq` object where a key is set.
+macOS `base64` has no `-w0`; use `base64 -i T.docx` instead (it does not wrap lines).
 
 Multipart:
 
@@ -59,18 +60,12 @@ curl -s localhost:8080/api/render -F templateFile=@T.docx -F 'data=@payload.json
   -F outputFormat=pdf -o out.pdf
 ```
 
-Add `-F accessKey=...` where a key is set.
-
 Render failures return HTTP 400 as Docmosis does, with the first problem in `shortMsg` and every problem in `longMsg`.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `TEMPLATES_DIR` | `/templates` | Searched recursively for `.docx` files |
-| `TEMPLATE_ENV` | unset | With `Base/` and environment folders, `<ENV>/` overrides `Base/` |
-| `UPLOAD_DIR` | `/tmp/templates` | Uploaded templates, which take precedence |
-| `ACCESS_KEY` | unset | When set, every endpoint except health, ping and status requires a matching `accessKey` |
 | `SOFFICE_BIN` | `soffice` | LibreOffice binary |
 | `SOFFICE_PROFILE_DIR` | `<tmpdir>/lo-profile` | Parent of the per-conversion profile directories |
 | `SOFFICE_POOL_SIZE` | 2 | Concurrent conversions |
@@ -82,7 +77,7 @@ Render failures return HTTP 400 as Docmosis does, with the first problem in `sho
 docker compose up --build
 ```
 
-The service listens on http://localhost:8080. It has no `ACCESS_KEY`, so it accepts any key or none. Templates uploaded through `/api/uploadTemplate` are kept by the running container only.
+The service listens on http://localhost:8080.
 
 ### Point a service at it
 
@@ -93,19 +88,9 @@ The service listens on http://localhost:8080. It has no `ACCESS_KEY`, so it acce
 
 From inside another container use `http://host.docker.internal:8080`, or join the service to this compose network.
 
-### Use a clone of hmcts/docmosis
-
-Mount the clone's `Templates/` directory read-only and say which environment folder to use:
-
-```
-TEMPLATES_DIR=/path/to/docmosis/Templates TEMPLATE_ENV=AAT docker compose up --build
-```
-
-`TEMPLATES_DIR` defaults to `./templates` and `TEMPLATE_ENV` is optional. The directory is mounted at `/templates`.
-
 ## Remote tests
 
-`TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance. Set `TEST_ACCESS_KEY` when the target enforces one.
+`TEST_URL=http://localhost:8080 yarn test:smoke` and `yarn test:functional` run against any running instance.
 
 The fixtures are real Docmosis templates, and their expected output is captured from a licensed Docmosis, not written by hand. A fixture is a directory `test/fixtures/src/<name>/` holding `document.xml` and `data.json` (and `header1.xml` if it has a header).
 - A merge fixture has an `expected.txt`, the merged text. The functional suite renders it as docx and PDF.
@@ -123,10 +108,10 @@ After editing a fixture, run `node test/fixtures/build.mjs` to rebuild the commi
 
 ```
 export DOCMOSIS_URL=http://127.0.0.1:18087   # DOCMOSIS_CONTAINER=docmosis-local, DOCMOSIS_ACCESS_KEY optional
-export DR_URL=http://localhost:8080          # DR_ACCESS_KEY if the service enforces one
+export DR_URL=http://localhost:8080
 node test/parity/compare.mjs                 # every fixture on both, diffs printed; or name fixtures
 node test/parity/templates.mjs <hmcts/docmosis>/Templates/Base CV-UNS-DEC-ENG-01133 FL-PRL-APP-ENG-FL401-draft
 node test/parity/capture.mjs                 # rewrite expected files from Docmosis
 ```
 
-`compare.mjs` prints `same` or `DIFF` per fixture and exits 1 on any difference. `templates.mjs` generates sample data for real templates, renders each on both with devMode on and writes the data, both texts and a diff to a directory it prints. Docmosis caches templates by file mtime, so every upload uses a fresh name; the scripts do this themselves.
+`compare.mjs` prints `same` or `DIFF` per fixture and exits 1 on any difference. `templates.mjs` generates sample data for real templates, renders each on both with devMode on and writes the data, both texts and a diff to a directory it prints. Docmosis caches templates by file mtime, so every template copied into it gets a fresh name; the scripts do this themselves. Templates are sent to this service inline.

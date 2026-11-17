@@ -5,7 +5,7 @@
 //
 // Environment (see "Checking parity with Docmosis" in the README):
 //   DOCMOSIS_URL, DOCMOSIS_ACCESS_KEY, DOCMOSIS_CONTAINER   the licensed Docmosis (defaults match `docmosis local start`)
-//   DR_URL (default http://127.0.0.1:18099), DR_ACCESS_KEY   the dtsse-doc-render under test
+//   DR_URL (default http://127.0.0.1:18099)   the dtsse-doc-render under test
 //
 // Merge fixtures are compared line by line. "_" fixtures must be rejected by both with the same status and, from the
 // renderer, a message containing the fixture's error-phrase.txt; they are then rendered again with devMode on and

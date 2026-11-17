@@ -1,20 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { accessKey, bytes, render } from "../support/client.ts";
+import { baseUrl, bytes, render } from "../support/client.ts";
 import { docxText } from "../support/docx-text.ts";
-import { loadErrorFixtures, loadFixtures, uniqueTemplateName, uploadAndRender } from "../support/fixtures.ts";
+import { loadErrorFixtures, loadFixtures, renderInline } from "../support/fixtures.ts";
 import { isPdf } from "../support/pdf.ts";
 
-const failure = (outcome: { templateName: string; body: Buffer }) => `${outcome.templateName}: ${outcome.body.toString("utf8", 0, 800)}`;
+const failure = (outcome: { body: Buffer }) => outcome.body.toString("utf8", 0, 800);
 
 describe.each(loadFixtures())("fixture $name", (fixture) => {
   it("merges to the expected text as docx", async () => {
-    const outcome = await uploadAndRender(fixture.name, fixture.docx, { outputFormat: "docx", data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", data: fixture.data });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     expect(docxText(outcome.body).join("\n")).toBe(fixture.expected.join("\n"));
   });
 
   it("renders to PDF", async () => {
-    const outcome = await uploadAndRender(fixture.name, fixture.docx, { outputFormat: "pdf", data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "pdf", data: fixture.data });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     expect(isPdf(outcome.body)).toBe(true);
   });
@@ -22,7 +22,7 @@ describe.each(loadFixtures())("fixture $name", (fixture) => {
 
 describe.each(loadErrorFixtures())("error fixture $name", (fixture) => {
   it("rejects the template with Docmosis's message outside devMode", async () => {
-    const outcome = await uploadAndRender(fixture.name, fixture.docx, { outputFormat: "docx", devMode: false, data: fixture.data }, { expectFailure: true });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: false, data: fixture.data });
     expect(outcome.response.status, failure(outcome)).toBe(400);
     const body = JSON.parse(outcome.body.toString("utf8"));
     expect(body.succeeded).toBe(false);
@@ -30,7 +30,7 @@ describe.each(loadErrorFixtures())("error fixture $name", (fixture) => {
   });
 
   it("writes the error into the document in devMode", async () => {
-    const outcome = await uploadAndRender(fixture.name, fixture.docx, { outputFormat: "docx", devMode: true, data: fixture.data });
+    const outcome = await renderInline(fixture.docx, { outputFormat: "docx", devMode: true, data: fixture.data });
     expect(outcome.response.status, failure(outcome)).toBe(200);
     const lines = docxText(outcome.body);
     expect(lines.join("\n")).toMatch(/Docmosis\d+/);
@@ -41,15 +41,19 @@ describe.each(loadErrorFixtures())("error fixture $name", (fixture) => {
 });
 
 describe("errors", () => {
-  it("answers 400 for a template that does not exist", async () => {
-    const response = await render({ templateName: uniqueTemplateName("missing"), outputFormat: "pdf", data: {} });
+  it("answers 400 for a render that names a template without sending it", async () => {
+    const response = await fetch(`${baseUrl}/api/render`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ templateName: "Missing.docx", outputName: "out.pdf", data: {} })
+    });
     expect(response.status).toBe(400);
-    expect(await response.json()).toMatchObject({ succeeded: false, shortMsg: expect.stringMatching(/template does not exist/i) });
+    expect(await response.json()).toMatchObject({ succeeded: false, shortMsg: expect.stringMatching(/templateBase64 or templateFile/) });
   });
 
-  it.skipIf(!accessKey)("answers 401 for a wrong access key", async () => {
-    const response = await render({ templateName: uniqueTemplateName("any"), outputFormat: "pdf", data: {}, accessKey: "not-the-key" });
-    expect(response.status).toBe(401);
+  it("ignores the accessKey clients send", async () => {
+    const response = await render({ template: loadFixtures()[0]!.docx, outputFormat: "docx", data: loadFixtures()[0]!.data, ...{ accessKey: "anything" } });
+    expect(response.status).toBe(200);
     expect((await bytes(response)).length).toBeGreaterThan(0);
   });
 });

@@ -13,7 +13,6 @@ export const srcDir = join(fixturesDir, "src");
 const docmosisContainer = process.env.DOCMOSIS_CONTAINER || "docmosis-local";
 export const docmosisUrl = (process.env.DOCMOSIS_URL || "http://127.0.0.1:18087").replace(/\/$/, "");
 export const rendererUrl = (process.env.DR_URL || "http://127.0.0.1:18099").replace(/\/$/, "");
-const rendererKey = process.env.DR_ACCESS_KEY || process.env.TEST_ACCESS_KEY || "k";
 
 let cachedDocmosisKey;
 function docmosisKey() {
@@ -78,20 +77,10 @@ export async function renderOnDocmosis(docx, data, { format = "docx", devMode = 
   });
 }
 
-/** Renders a template file on a dtsse-doc-render instance, uploading it first. */
-export async function renderOnRenderer(docx, data, { format = "docx", devMode = false, label = "t" } = {}) {
-  const templateName = uniqueName(label);
-  const form = new FormData();
-  form.set("accessKey", rendererKey);
-  form.set("templateName", templateName);
-  form.set("file", new Blob([new Uint8Array(readFileSync(docx))]), templateName);
-  const upload = await fetch(`${rendererUrl}/api/uploadTemplate`, { method: "POST", body: form });
-  if (!upload.ok) {
-    throw new Error(`upload to ${rendererUrl} failed: ${upload.status} ${await upload.text()}`);
-  }
+/** Renders a template file on a dtsse-doc-render instance, sending the template inline. */
+export async function renderOnRenderer(docx, data, { format = "docx", devMode = false } = {}) {
   return post(rendererUrl, {
-    accessKey: rendererKey,
-    templateName,
+    templateBase64: readFileSync(docx).toString("base64"),
     outputName: `out.${format}`,
     outputFormat: format,
     devMode,
