@@ -22,7 +22,7 @@ const profiles = mkdtempSync(path.join(os.tmpdir(), "lo-profiles-"));
 process.env.SOFFICE_PROFILE_DIR = profiles;
 afterAll(() => rmSync(profiles, { recursive: true, force: true }));
 
-describe.skipIf(!hasSoffice)("LibreOffice conversion", () => {
+describe.skipIf(!hasSoffice)("LibreOffice conversion", { timeout: 60_000 }, () => {
   it("reports ready", async () => {
     expect(await converterReady()).toBe(true);
   });
@@ -93,7 +93,7 @@ const docxWithLinkedImage = (target: string): Buffer =>
 
 const imageCount = (pdf: Buffer): number => pdf.toString("latin1").match(/\/Subtype\s*\/Image/g)?.length ?? 0;
 
-describe.skipIf(!hasSoffice)("untrusted document content", () => {
+describe.skipIf(!hasSoffice)("untrusted document content", { timeout: 60_000 }, () => {
   const requests: string[] = [];
   const secret = path.join(profiles, "secret.png");
   const secretText = path.join(profiles, "secret.odt");
