@@ -1,8 +1,8 @@
 # The Docmosis template language this service supports
 
-The scope comes from a survey of every template in hmcts/docmosis on 2026-11-17: 2,972 readable `.docx` files holding 221,927 instructions. The supported list below covers every instruction in those templates except the long tail under "Not yet supported". Anything outside it fails with `unsupported instruction <<…>>`.
+The scope comes from a survey of a corpus of 2,972 HMCTS Docmosis templates (surveyed 2026-11-17), all readable `.docx` files, holding 221,927 instructions. The supported list below covers every instruction in those templates except the long tail under "Not yet supported". Anything outside it fails with `unsupported instruction <<…>>`.
 
-The behaviour described here was verified against a licensed Docmosis Tornado on 2026-11-17, and the fixtures in `test/fixtures/src/` hold Docmosis's own output (see "Checking parity with Docmosis" in the README).
+The behaviour described here was verified against a licensed Docmosis Tornado on 2026-11-17, and the fixtures in `test/fixtures/src/` hold Docmosis's own output (see "Checking parity with Docmosis" in the README). A render here is not proof that a template works in Docmosis.
 
 ## Supported
 

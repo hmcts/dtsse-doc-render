@@ -1,5 +1,5 @@
 #!/bin/sh
-# Installs the font set of the hmcts/rdo-docmosis image (Fedora 40 plus LibreOffice 7.6.7.2) under the given
+# Installs the font set of the Docmosis image (Fedora 40 plus LibreOffice 7.6.7.2) under the given
 # directory. Every download is pinned in sources.sha256 and every installed font is checked against fonts.sha256,
 # which was taken from the running Docmosis image, so a changed upstream file fails the build.
 #

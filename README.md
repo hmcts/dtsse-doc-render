@@ -88,7 +88,7 @@ curl -s localhost:8080/api/render -F templateFile=@Letter.docx -F include=@Lette
 
 ## Fonts
 
-The image carries the fonts of the Docmosis image (`hmcts/rdo-docmosis`, Fedora 40), file for file, so that line breaks and page counts match: the Microsoft core fonts including Calibri, Cambria and Tahoma, Open Sans, GNU FreeFont, Cantarell, Noto Sans, Source Code Pro, the X11 Type1 fonts, and the fonts LibreOffice 7.6.7.2 bundles. There are no Alpine font packages. `docker/fonts/install-fonts.sh` downloads each source, `sources.sha256` pins them, and `fonts.sha256` lists every installed font as taken from the running Docmosis image. The build fails if either check does not pass. `docker/fonts/99-docmosis.conf` makes fontconfig scan the same directories as Docmosis, and names the substitute LibreOffice 7.6 picks for a family neither image has (Noto Sans, or Cantarell for Segoe UI, Arial for Helvetica and so on), because LibreOffice 25.8 ignores fontconfig's default fallback and would choose Noto Serif.
+The image carries the fonts of the Docmosis image (Fedora 40), file for file, so that line breaks and page counts match: the Microsoft core fonts including Calibri, Cambria and Tahoma, Open Sans, GNU FreeFont, Cantarell, Noto Sans, Source Code Pro, the X11 Type1 fonts, and the fonts LibreOffice 7.6.7.2 bundles. There are no Alpine font packages. `docker/fonts/install-fonts.sh` downloads each source, `sources.sha256` pins them, and `fonts.sha256` lists every installed font as taken from the running Docmosis image. The build fails if either check does not pass. `docker/fonts/99-docmosis.conf` makes fontconfig scan the same directories as Docmosis, and names the substitute LibreOffice 7.6 picks for a family neither image has (Noto Sans, or Cantarell for Segoe UI, Arial for Helvetica and so on), because LibreOffice 25.8 ignores fontconfig's default fallback and would choose Noto Serif.
 
 `fc-match` returns the same file for every family in the template corpus as the Docmosis image does. To check, run `fc-match "<family>" file` in this container and in `docmosis-local`.
 
@@ -128,13 +128,14 @@ After editing a fixture, run `node test/fixtures/build.mjs` to rebuild the commi
 
 1. Start a licensed Docmosis from the workspace: `docmosis local start`. It listens on `http://127.0.0.1:18087` in the container `docmosis-local`.
 2. Start this service: `docker compose up --build`, which listens on `http://localhost:8080`.
-3. Point the scripts at both. The Docmosis access key is read from the container's `DOCMOSIS_ACCESSKEY` unless `DOCMOSIS_ACCESS_KEY` is set.
+3. Have a directory of real Docmosis templates to hand; the template scripts below call it `<templates dir>`, and take templates from its `Base` folder.
+4. Point the scripts at both. The Docmosis access key is read from the container's `DOCMOSIS_ACCESSKEY` unless `DOCMOSIS_ACCESS_KEY` is set.
 
 ```
 export DOCMOSIS_URL=http://127.0.0.1:18087   # DOCMOSIS_CONTAINER=docmosis-local, DOCMOSIS_ACCESS_KEY optional
 export DR_URL=http://localhost:8080
 node test/parity/compare.mjs                 # every fixture on both, diffs printed; or name fixtures
-node test/parity/templates.mjs <hmcts/docmosis>/Templates/Base CV-UNS-DEC-ENG-01133 FL-PRL-APP-ENG-FL401-draft
+node test/parity/templates.mjs <templates dir>/Base CV-UNS-DEC-ENG-01133 FL-PRL-APP-ENG-FL401-draft
 node test/parity/capture.mjs                 # rewrite expected files from Docmosis
 ```
 
@@ -145,9 +146,9 @@ node test/parity/capture.mjs                 # rewrite expected files from Docmo
 `test/parity/visual.mjs` measures how close this service's PDFs look to a licensed Docmosis's. It needs the same two backends as above, plus Docker for a throwaway image (`dtsse-doc-render-visual`, built once from `test/parity/visual/Dockerfile`: Alpine, poppler-utils and ImageMagick). Files go in and out with `docker cp`, so a remote Docker daemon works.
 
 ```
-node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base CV-PCS-CLM-ENG-Defence-Form --out /tmp/vis
-node test/parity/visual.mjs <hmcts/docmosis>/Templates/Base --sample 120 --include names.txt --out /tmp/vis
-node test/parity/fonts.mjs <hmcts/docmosis>/Templates/Base --out /tmp/fonts.json
+node test/parity/visual.mjs <templates dir>/Base CV-PCS-CLM-ENG-Defence-Form --out /tmp/vis
+node test/parity/visual.mjs <templates dir>/Base --sample 120 --include names.txt --out /tmp/vis
+node test/parity/fonts.mjs <templates dir>/Base --out /tmp/fonts.json
 ```
 
 For each template it generates data (the generator is shared with `templates.mjs` in `datagen.mjs`), renders a PDF on both with devMode on, rasterises every page at 100 dpi and writes `summary.json` and `report.html` to `--out`, with the PDFs and page images under `work/<template>/`. `--sample N` draws a sample proportional by jurisdiction prefix (`CV-`, `FL-`, `TB-`, ...) and always includes the names in the `--include` file. `--jobs` sets render concurrency (default 3), `--reuse` re-analyses PDFs already in `--out` without rendering, and `VISUAL_FUZZ` the anti-alias colour tolerance (default 12%). Per template the summary has:
