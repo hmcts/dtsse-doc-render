@@ -5,6 +5,7 @@ import { ImageMerger } from "./images.ts";
 import { IncludeHost } from "./include.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
 import { renderPart } from "./render.ts";
+import { dropSvgAlternatives } from "./svg.ts";
 import { type ArchiveTally, DocxFormatError, unzipWithin } from "./zip.ts";
 
 export { DocxFormatError };
@@ -55,6 +56,7 @@ export function renderDocx(template: Buffer, data: unknown, options: RenderOptio
     entries[name] = bytes;
   }
   images.finish();
+  dropSvgAlternatives(entries, rendered);
   const mtime = options.now ?? new Date();
   const all = Object.keys(entries);
   const ordered = [...all.filter((n) => n === "[Content_Types].xml"), ...all.filter((n) => n !== "[Content_Types].xml")];

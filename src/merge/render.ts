@@ -4,6 +4,7 @@ import { dropFirstPageStyles, removedFirsts } from "./headers.ts";
 import type { ImageMerger } from "./images.ts";
 import { IncludeError, type IncludeHost } from "./include.ts";
 import { type Limits, resolveLimits } from "./limits.ts";
+import { rewriteParagraphMarks } from "./marks.ts";
 import { type Found, hasContent, NODE_CHAR, type Para, paraOf, REF_BREAK, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
 import { applyRenderer, RenderError } from "./renderer.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, stripIllegalXml, type XEl, type XNode } from "./xml.ts";
@@ -1292,6 +1293,7 @@ export function renderPart(
   }
   dropFirstPageStyles(container, firsts);
   images?.apply(container, scope, { devMode, messages, body: ctx.body, counter, part });
+  rewriteParagraphMarks(container);
   if (container.name === "w:body") {
     endWithParagraph(container);
   }
