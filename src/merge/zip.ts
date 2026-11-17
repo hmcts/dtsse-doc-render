@@ -30,14 +30,14 @@ export function unzipWithin(archive: Buffer, limits: Limits, tally: ArchiveTally
     return unzipSync(new Uint8Array(archive.buffer, archive.byteOffset, archive.byteLength), {
       filter: (file) => {
         if (++tally.entries > limits.maxEntries) {
-          throw new LimitError(`the archive has more than ${limits.maxEntries} entries`);
+          throw new LimitError(`the archive has more than ${limits.maxEntries} entries`, "entries");
         }
         if (file.originalSize > limits.maxEntryBytes) {
-          throw new LimitError(`${file.name} is larger than ${mib(limits.maxEntryBytes)} uncompressed`);
+          throw new LimitError(`${file.name} is larger than ${mib(limits.maxEntryBytes)} uncompressed`, "entryBytes");
         }
         tally.total += file.originalSize;
         if (tally.total > limits.maxTotalBytes) {
-          throw new LimitError(`the archive is larger than ${mib(limits.maxTotalBytes)} uncompressed`);
+          throw new LimitError(`the archive is larger than ${mib(limits.maxTotalBytes)} uncompressed`, "totalBytes");
         }
         if (file.originalSize === 0 && file.compression !== 0 && file.size > 16) {
           throw new DocxFormatError(`${file.name} declares no uncompressed size but has data`);

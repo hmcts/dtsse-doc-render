@@ -7,7 +7,25 @@ import { pathToFileURL } from "node:url";
 export type OutputFormat = "pdf" | "docx";
 export type ConvertTarget = "pdf" | "doc" | "odt" | "html" | "txt";
 
-export class ConversionError extends Error {}
+export class ConversionError extends Error {
+  constructor(
+    message: string,
+    readonly timedOut = false
+  ) {
+    super(message);
+  }
+}
+
+/** The caller sent a document or target that is refused before LibreOffice runs: a client fault, not a conversion failure. */
+export class ConversionInputError extends ConversionError {
+  override name = "ConversionInputError";
+  constructor(
+    message: string,
+    readonly reason: "source_type" | "target_format" | "content_mismatch"
+  ) {
+    super(message);
+  }
+}
 
 export class ConversionBusyError extends Error {
   override name = "ConversionBusyError";
@@ -187,7 +205,7 @@ const run = (args: string[], limitMs: number, env: NodeJS.ProcessEnv): Promise<R
     child.on("close", (code, signal) => {
       clearTimeout(timer);
       if (timedOut) {
-        reject(new ConversionError(`LibreOffice timed out after ${limitMs}ms`));
+        reject(new ConversionError(`LibreOffice timed out after ${limitMs}ms`, true));
       } else {
         resolve({ code, signal, output });
       }
@@ -257,13 +275,13 @@ export async function convertTo(document: Buffer, sourceExtension: string, targe
       .replace(/[^a-z0-9]/g, "") || "docx";
   const magic = SOURCE_TYPES[extension];
   if (!magic) {
-    throw new ConversionError(`Unsupported source document type '.${extension}'. Allowed: ${Object.keys(SOURCE_TYPES).join(", ")}`);
+    throw new ConversionInputError(`Unsupported source document type '.${extension}'. Allowed: ${Object.keys(SOURCE_TYPES).join(", ")}`, "source_type");
   }
   if (!(targetFormat in TARGETS)) {
-    throw new ConversionError(`Unsupported output format '${targetFormat}'`);
+    throw new ConversionInputError(`Unsupported output format '${targetFormat}'`, "target_format");
   }
   if (!matchesMagic(document, magic)) {
-    throw new ConversionError(`The document content does not match its '.${extension}' file type`);
+    throw new ConversionInputError(`The document content does not match its '.${extension}' file type`, "content_mismatch");
   }
   const slot = await acquire();
   try {

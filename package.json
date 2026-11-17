@@ -35,10 +35,12 @@
     "vitest": "5.1.0"
   },
   "dependencies": {
+    "applicationinsights": "3.17.0",
     "busboy": "1",
     "fflate": "^0.8.3"
   },
   "resolutions": {
-    "@types/node": "24.19.2"
+    "@types/node": "24.19.2",
+    "@opentelemetry/instrumentation-http": "0.222.0"
   }
 }
