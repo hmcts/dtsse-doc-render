@@ -110,8 +110,8 @@ describe("conditional sections", () => {
 
   it("keeps the text around a block spanning paragraphs with the markers in their text", async () => {
     const b = para("one <<cs_flag>>two") + para("three<<es_>> four");
-    expect(await texts(b, { flag: true })).toEqual(["one two", "three", " four"]);
-    expect(await texts(b, { flag: false })).toEqual(["one ", " four"]);
+    expect(await texts(b, { flag: true })).toEqual(["one two", "three four"]);
+    expect(await texts(b, { flag: false })).toEqual(["one four"]);
   });
 
   it("keeps drawings between inline markers only when the branch is kept", async () => {
@@ -278,7 +278,7 @@ describe("table rows", () => {
         { name: "y", k: [{ v: 3 }] }
       ]
     };
-    expect(paragraphs(await merge(outer, data))).toEqual(["x", "1", "2", "", "y", "3", ""]);
+    expect(paragraphs(await merge(outer, data))).toEqual(["x", "1", "2", "", "y", "3", "", ""]);
   });
 });
 

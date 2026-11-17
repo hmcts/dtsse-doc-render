@@ -1,6 +1,6 @@
 import * as exprModule from "./expr.ts";
 import { ExpressionError, evaluate, formatValue, type Instruction, type Scope, truthy } from "./expr.ts";
-import { type Found, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
+import { type Found, hasContent, NODE_CHAR, type Para, paraOf, splitAfterPageBreaks, splitAtBreaks, trimTrailingSpace } from "./para.ts";
 import { childEls, cloneEl, encodeText, findDescendants, makeEl, parseXml, serializeXml, type XEl, type XNode } from "./xml.ts";
 
 export interface Ctx {
@@ -26,6 +26,8 @@ interface Marker {
   para: Para;
   /** True when every marker of the block is in one paragraph. */
   inline: boolean;
+  /** For an else or end tag, the tag that opened the branch it closes. */
+  opener?: Marker;
 }
 
 interface TBranch<N> {
@@ -39,13 +41,19 @@ interface TBlock<N> {
   head: Marker;
   inline: boolean;
   branches: TBranch<N>[];
+  /** The end tag, once the block is closed. */
+  end: Marker | null;
 }
 
 type TItem<N> = { t: "node"; node: N } | TBlock<N>;
 
 type Seq<N> = { m: Marker } | { n: N };
 
-type ListEntry = { k: "frag"; el: XEl; origin: number; idx: number; cont: boolean } | { k: "table" | "sdt" | "other"; node: XNode };
+type ListEntry =
+  | { k: "frag"; el: XEl; origin: number; idx: number; cont: boolean; whole: boolean; keep: boolean }
+  | { k: "keep"; el: XEl; origin: number }
+  | { k: "extra"; el: XEl }
+  | { k: "table" | "sdt" | "other"; node: XNode };
 
 type RowEntry = { k: "row"; el: XEl } | { k: "other"; node: XNode };
 
@@ -94,11 +102,13 @@ function matchMarkers(markers: Marker[]): Set<Marker> {
     } else if (m.kind === "else") {
       const top = stack.at(-1);
       if (top && (top[0]!.kind === "cs" || top[0]!.kind === "cr")) {
+        m.opener = top.at(-1);
         top.push(m);
       }
     } else {
       const top = stack.pop();
       if (top) {
+        m.opener = top.at(-1);
         top.push(m);
         const inline = top.every((x) => x.where === m.where);
         for (const x of top) {
@@ -122,7 +132,7 @@ function buildTree<N>(seq: Seq<N>[]): TItem<N>[] {
     }
     const m = s.m;
     if (isStart(m.kind)) {
-      const block: TBlock<N> = { t: "block", kind: m.kind as TBlock<N>["kind"], head: m, inline: m.inline, branches: [{ head: m, items: [] }] };
+      const block: TBlock<N> = { t: "block", kind: m.kind as TBlock<N>["kind"], head: m, inline: m.inline, branches: [{ head: m, items: [] }], end: null };
       cur.push(block);
       stack.push({ block, parent: cur });
       cur = block.branches[0]!.items;
@@ -131,7 +141,9 @@ function buildTree<N>(seq: Seq<N>[]): TItem<N>[] {
       stack.at(-1)!.block.branches.push(branch);
       cur = branch.items;
     } else {
-      cur = stack.pop()!.parent;
+      const top = stack.pop()!;
+      top.block.end = m;
+      cur = top.parent;
     }
   }
   return root;
@@ -154,29 +166,34 @@ function repeatItems(value: unknown): unknown[] {
 
 interface Plan<N> {
   runs: { items: TItem<N>[]; scope: Scope }[];
+  /** Index of the branch that was kept, or -1. */
+  taken: number;
   error?: string;
 }
 
 function planBlock<N>(block: TBlock<N>, scope: Scope, ctx: Ctx): Plan<N> {
   try {
     if (block.kind === "cs" || block.kind === "cr") {
-      for (const br of block.branches) {
+      for (const [i, br] of block.branches.entries()) {
         const ins = br.head.ins;
         const cond = ins.kind === "cs" || ins.kind === "cr" || ins.kind === "else" ? ins.cond : undefined;
         if (cond === undefined || truthy(evaluate(cond, scope))) {
-          return { runs: [{ items: br.items, scope }] };
+          return { runs: [{ items: br.items, scope }], taken: i };
         }
       }
-      return { runs: [] };
+      return { runs: [], taken: -1 };
     }
     const ins = block.head.ins;
     const value = ins.kind === "rs" || ins.kind === "rr" ? evaluate(ins.expr, scope) : undefined;
     const list = repeatItems(value);
-    return { runs: list.map((item, i) => ({ items: block.branches[0]!.items, scope: scope.child(item, i + 1, list.length) })) };
+    return {
+      runs: list.map((item, i) => ({ items: block.branches[0]!.items, scope: scope.child(item, i + 1, list.length) })),
+      taken: list.length > 0 ? 0 : -1
+    };
   } catch (e) {
     const reason = e instanceof ExpressionError || e instanceof Error ? e.message : String(e);
     const condition = block.head.text.replace(/^(?:cs|cr|rs|rr)_\s*/, "").replace(/^\{([\s\S]*)\}$/, "$1");
-    return { runs: [], error: fail(ctx, `Error in expression:${reason}`, condition, block.head.loc, false) };
+    return { runs: [], taken: -1, error: fail(ctx, `Error in expression:${reason}`, condition, block.head.loc, false) };
   }
 }
 
@@ -197,6 +214,10 @@ interface Out {
   /** Source origin and fragment index of the last paragraph fragment, for joining the fragments of one paragraph. */
   lastFrag: { origin: number; idx: number } | null;
   killed: Set<string>;
+  /** Paragraph origins (with epoch) that put at least one fragment in the output. */
+  emitted: Set<string>;
+  /** An untaken branch left the paragraph before it open: the next fragment after its end joins it. */
+  pendingJoin: number | null;
   /** True while the end of `last` is literal text ending in exactly one space with nothing but zero-output tags since. */
   seam: boolean;
 }
@@ -205,6 +226,7 @@ function pushNode(out: Out, node: XNode): void {
   out.nodes.push(node);
   out.lastOrigin = null;
   out.lastFrag = null;
+  out.pendingJoin = null;
   out.seam = false;
 }
 
@@ -239,6 +261,59 @@ export function htmlToText(html: string): string {
   return text.replace(/\f+/g, "\f").replace(/^\f|\f$/g, "");
 }
 
+/**
+ * Docmosis drops a paragraph that held nothing but block tags, assignments and comments, and keeps any other as an empty
+ * paragraph when it renders to nothing: one with a field, or with a literal character (a space counts unless it only
+ * precedes the first tag). A tag written with a space after `<<` does not count as a tag here.
+ */
+function keepsParagraph(para: Para): boolean {
+  if (para.found.length === 0 || para.found.some((f) => f.ins.kind === "field" || f.ins.kind === "unsupported" || /^\s/.test(f.body))) {
+    return true;
+  }
+  const first = para.found[0]!.start;
+  let pos = 0;
+  const literal = (a: number, b: number): boolean => para.text.slice(a, b) !== "" && (a >= first || para.text.slice(a, b).trim() !== "");
+  for (const f of para.found) {
+    if (literal(pos, f.start)) {
+      return true;
+    }
+    pos = f.end;
+  }
+  return literal(pos, para.text.length);
+}
+
+const nodeKey = (n: XNode): string => (n.kind === "text" ? n.raw : `${n.open}${n.children.map(nodeKey).join("")}`);
+
+/**
+ * Where a branch opens in one paragraph and its end is in another with identical paragraph properties, Docmosis lets the
+ * text before the opener run on into the text after the end, and adds no empty paragraphs; with different properties it
+ * ends each paragraph where it began.
+ */
+function runsOn(end: Marker): boolean {
+  const open = end.opener;
+  if (!open) {
+    return false;
+  }
+  if (open.where === end.where) {
+    return true;
+  }
+  const props = (m: Marker): string => childEls(m.para.el, "w:pPr").map(nodeKey).join("");
+  return props(open) === props(end);
+}
+
+/** A paragraph with the properties of `el` and no content. */
+function emptyLike(el: XEl): XEl {
+  const p = makeEl("w:p", el.open, [], false);
+  p.ord = el.ord;
+  for (const pPr of childEls(el, "w:pPr")) {
+    const copy = cloneEl(pPr);
+    copy.children = copy.children.filter((c) => !(c.kind === "el" && c.name === "w:sectPr"));
+    copy.parent = p;
+    p.children.push(copy);
+  }
+  return p;
+}
+
 const WHOLE_PARA = (para: Para, f: Found): boolean => f.start === 0 && f.end === para.text.length && para.found.length === 1;
 
 function withoutParagraphProperties(el: XEl): void {
@@ -251,8 +326,17 @@ interface FragmentResult {
   seam: "own" | "carry" | null;
 }
 
-function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: (() => void) | null): FragmentResult {
+function renderFragment(
+  el: XEl,
+  scope: Scope,
+  ctx: Ctx,
+  joined: boolean,
+  drop: (() => void) | null,
+  whole: boolean,
+  start: "tag" | "paragraph" | null
+): FragmentResult {
   const para = paraOf(el);
+  const keeps = whole && keepsParagraph(para);
   const where = `paragraph ${el.ord}`;
   for (const p of para.problems) {
     ctx.messages.push(`${p} (${ctx.part}, ${where})`);
@@ -271,8 +355,11 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
   let bare = false;
   let tail = -1;
   let carry = drop !== null;
+  let atStart = start !== null;
+  let sawTag = start === "tag";
   let prev = 0;
   const failAt = (f: Found, reason: string): void => {
+    atStart = false;
     const text = fail(ctx, reason, f.body, where);
     para.kill(f.start, f.end);
     if (ctx.devMode) {
@@ -288,8 +375,11 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
         para.kill(tail, tail + 1);
       } else if (carry) {
         drop?.();
+      } else if (atStart && sawTag) {
+        para.kill(a, a + 1);
       }
     }
+    atStart = false;
     tail = -1;
     carry = false;
     if (para.text[b - 1] === " " && (b - a === 1 || para.text[b - 2] !== " ")) {
@@ -299,6 +389,7 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
   for (const f of para.found) {
     chunk(prev, f.start);
     prev = f.end;
+    sawTag ||= f.body.trim() !== "pageBreak";
     const ins = f.ins;
     try {
       if (ins.kind === "field") {
@@ -319,6 +410,7 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
         if (value !== "") {
           tail = -1;
           carry = false;
+          atStart = false;
         }
       } else if (ins.kind === "assign") {
         scope.setVar(ins.name, evaluate(ins.expr, scope));
@@ -351,7 +443,7 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
   if (opBlank) {
     return { el: "op", seam };
   }
-  if (hadMarker && !content && !hasSectPr(el) && !joined) {
+  if (hadMarker && !content && !hasSectPr(el) && !joined && !keeps) {
     return { el: null, seam };
   }
   if (pageBreak) {
@@ -372,6 +464,17 @@ function renderFragment(el: XEl, scope: Scope, ctx: Ctx, joined: boolean, drop: 
 }
 
 function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epoch: number, ctx: Ctx): void {
+  if (entry.k === "extra") {
+    pushNode(out, emptyLike(entry.el));
+    return;
+  }
+  if (entry.k === "keep") {
+    const key = `${entry.origin}:${epoch}`;
+    if (!out.killed.has(key) && !out.emitted.has(key)) {
+      pushNode(out, emptyLike(entry.el));
+    }
+    return;
+  }
   if (entry.k === "frag") {
     const key = `${entry.origin}:${epoch}`;
     if (out.killed.has(key)) {
@@ -379,14 +482,16 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
     }
     const sameEpoch = out.lastOrigin === key;
     const ordered = out.lastFrag?.origin === entry.origin && out.lastFrag.idx < entry.idx;
-    const joined = entry.cont && out.last !== null && (sameEpoch || ordered);
+    const joined = entry.cont && out.last !== null && (sameEpoch || ordered || out.pendingJoin === entry.origin);
     const source = clone ? cloneEl(entry.el) : entry.el;
-    if (entry.cont && !joined && paraOf(source).text.trim() === "") {
+    if (entry.cont && !joined && !entry.keep && paraOf(source).text.trim() === "") {
       return;
     }
     const last = out.last;
     const drop = joined && out.seam && last ? () => trimTrailingSpace(last) : null;
-    const { el: r, seam } = renderFragment(source, scope, ctx, joined, drop);
+    const afterTag = entry.idx > 0 || entry.cont;
+    const start = joined && out.last && hasContent(out.last) ? null : afterTag ? "tag" : "paragraph";
+    const { el: r, seam } = renderFragment(source, scope, ctx, joined, drop, entry.whole, start);
     if (r === "op") {
       if (sameEpoch) {
         out.nodes.pop();
@@ -415,6 +520,8 @@ function emitEntry(entry: ListEntry, scope: Scope, out: Out, clone: boolean, epo
         out.last = extra;
       }
       out.lastOrigin = key;
+      out.pendingJoin = null;
+      out.emitted.add(key);
       out.lastFrag = { origin: entry.origin, idx: entry.idx };
       out.seam = seam !== null;
     } else if (seam === null) {
@@ -454,17 +561,40 @@ function emitList(items: TItem<ListEntry>[], scope: Scope, out: Out, clone: bool
       pushNode(out, syntheticPara(plan.error));
     }
     const repeat = it.kind === "rs";
-    for (const run of plan.runs) {
-      const ep = repeat && !it.inline ? ++ctx.epoch : epoch;
-      emitList(run.items, run.scope, out, clone || repeat, ep, ctx);
-    }
+    it.branches.forEach((branch, i) => {
+      if (i === 0 || !repeat) {
+        const runs = repeat ? plan.runs : plan.runs.filter(() => plan.taken === i);
+        for (const run of runs) {
+          const ep = repeat && !it.inline ? ++ctx.epoch : epoch;
+          emitList(run.items, run.scope, out, clone || repeat, ep, ctx);
+        }
+      }
+      const end = it.branches[i + 1]?.head ?? it.end;
+      const taken = plan.taken === i;
+      if (!plan.error && end && end.where !== branch.head.where) {
+        if (runsOn(end)) {
+          if (!taken && out.lastFrag?.origin === branch.head.where) {
+            out.pendingJoin = end.where;
+          }
+          if (taken && keepsParagraph(branch.head.para) && !keepsParagraph(end.para)) {
+            emitEntry({ k: "extra", el: branch.head.para.el }, scope, out, clone, epoch, ctx);
+          }
+        } else if ((taken || branch.head.kind === "else") && keepsParagraph(branch.head.para)) {
+          emitEntry({ k: "extra", el: branch.head.para.el }, scope, out, clone, epoch, ctx);
+        }
+      }
+    });
   }
 }
 
 function splitParagraph(el: XEl, para: Para, ms: Marker[], origin: number, seq: Seq<ListEntry>[]): void {
   let kept = false;
-  const frag = (a: number, b: number, cont: boolean, force = false): void => {
-    const empty = cont ? b <= a : para.text.slice(a, b).trim() === "";
+  const keeps = keepsParagraph(para);
+  const inlineAll = ms.every((m) => m.inline);
+  const frag = (a: number, b: number, cont: boolean, force = false, before?: Marker, after?: Marker): void => {
+    const soft = before !== undefined && (before.kind === "es" || before.kind === "else") && runsOn(before);
+    const keep = after !== undefined && (after.kind === "es" || after.kind === "else") && runsOn(after) && keeps && !inlineAll;
+    const empty = cont ? b <= a && !keep : para.text.slice(a, b).trim() === "" && !(keeps && !inlineAll && !soft);
     if (empty && !force) {
       return;
     }
@@ -474,16 +604,28 @@ function splitParagraph(el: XEl, para: Para, ms: Marker[], origin: number, seq: 
     p.kill(0, a);
     p.kill(b, para.text.length);
     p.apply();
-    seq.push({ n: { k: "frag", el: copy, origin, idx: seq.filter((x) => "n" in x && x.n.k === "frag" && x.n.origin === origin).length, cont } });
+    seq.push({
+      n: { k: "frag", el: copy, origin, idx: seq.filter((x) => "n" in x && x.n.k === "frag" && x.n.origin === origin).length, cont, whole: false, keep }
+    });
   };
   for (let i = 0; i < ms.length; i++) {
-    frag(i === 0 ? 0 : ms[i - 1]!.end, ms[i]!.start, i > 0 && (ms[i - 1]!.inline || ms[i - 1]!.kind !== "es"));
+    frag(
+      i === 0 ? 0 : ms[i - 1]!.end,
+      ms[i]!.start,
+      i > 0 && (ms[i - 1]!.inline || ms[i - 1]!.kind !== "es" || runsOn(ms[i - 1]!)),
+      false,
+      ms[i],
+      i > 0 ? ms[i - 1] : undefined
+    );
     seq.push({ m: ms[i]! });
   }
   const last = ms.at(-1)!;
-  frag(last.end, para.text.length, last.inline || last.kind !== "es");
+  frag(last.end, para.text.length, last.inline || last.kind !== "es" || runsOn(last), false, undefined, last);
   if (!kept && hasSectPr(el)) {
     frag(para.text.length, para.text.length, false, true);
+  }
+  if (inlineAll && keeps) {
+    seq.push({ n: { k: "keep", el, origin } });
   }
 }
 
@@ -588,13 +730,13 @@ export function processList(children: XNode[], scope: Scope, ctx: Ctx): XNode[] 
       if (ms) {
         splitParagraph(c, paraOf(c), ms, idx, seq);
       } else {
-        seq.push({ n: { k: "frag", el: c, origin: idx, idx: 0, cont: false } });
+        seq.push({ n: { k: "frag", el: c, origin: idx, idx: 0, cont: false, whole: true, keep: false } });
       }
     } else {
       seq.push({ n: { k: c.name === "w:tbl" ? "table" : c.name === "w:sdt" ? "sdt" : "other", node: c } });
     }
   });
-  const out: Out = { nodes: [], last: null, lastOrigin: null, lastFrag: null, killed: new Set(), seam: false };
+  const out: Out = { nodes: [], last: null, lastOrigin: null, lastFrag: null, killed: new Set(), emitted: new Set(), pendingJoin: null, seam: false };
   emitList(buildTree(seq), scope, out, false, ctx.epoch, ctx);
   return out.nodes;
 }
@@ -909,6 +1051,17 @@ function reportIssues(issues: Issue[], ctx: Ctx): void {
   }
 }
 
+/** A document body cannot end in a table: Word needs a paragraph after it, and Docmosis supplies one. */
+function endWithParagraph(body: XEl): void {
+  const els = body.children.filter((c): c is XEl => c.kind === "el" && !c.dead);
+  const sect = els.at(-1)?.name === "w:sectPr" ? els.pop() : undefined;
+  if (els.at(-1)?.name === "w:tbl") {
+    const p = makeEl("w:p", "<w:p>", [], false);
+    p.parent = body;
+    body.children.splice(sect ? body.children.indexOf(sect) : body.children.length, 0, p);
+  }
+}
+
 export function renderPart(xml: string, part: string, scope: Scope, devMode: boolean, messages: string[], counter: { n: number } = { n: 0 }): string {
   const doc = parseXml(xml);
   const root = childEls(doc)[0];
@@ -923,5 +1076,8 @@ export function renderPart(xml: string, part: string, scope: Scope, devMode: boo
     return serializeXml(doc);
   }
   container.children = processList(container.children, scope, ctx);
+  if (container.name === "w:body") {
+    endWithParagraph(container);
+  }
   return serializeXml(doc);
 }

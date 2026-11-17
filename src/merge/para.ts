@@ -371,3 +371,16 @@ export function splitAfterPageBreaks(el: XEl): void {
     }
   });
 }
+
+/** Whether a paragraph element holds any text or non-text content yet. */
+export function hasContent(el: XEl): boolean {
+  for (const c of el.children) {
+    if (c.kind !== "el" || c.dead || SKIP.has(c.name)) {
+      continue;
+    }
+    if (c.name === "w:t" ? textOf(c) !== "" : LEAF.has(c.name) || hasContent(c)) {
+      return true;
+    }
+  }
+  return false;
+}

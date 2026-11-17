@@ -56,17 +56,85 @@ describe("whitespace seams: one space is dropped where a zero-output tag sits be
 describe("a block opened mid-paragraph joins the paragraph's text", () => {
   const b = para("that<<cs_f>> A<<else>> the applicant <<cs_f>>half") + para("<<es_>>") + para("<<es_>>");
   it("puts the text before the opener and the kept branch in one paragraph", async () => {
-    expect(await texts(b, data)).toEqual(["that the applicant "]);
+    expect(await texts(b, data)).toEqual(["that the applicant ", ""]);
   });
 
   it("joins the text before a taken block with the text after the opener", async () => {
     const taken = para("that<<cs_t>> A") + para("mid") + para("<<es_>> tail");
-    expect(await texts(taken, data)).toEqual(["that A", "mid", " tail"]);
+    expect(await texts(taken, data)).toEqual(["that A", "mid", "tail"]);
   });
 
-  it("keeps the text before a block that is not taken apart from the text after the block", async () => {
+  it("runs the text before a block that is not taken on into the text after it when the paragraph properties match", async () => {
     const skipped = para("that<<cs_f>> A") + para("mid") + para("<<es_>> tail");
-    expect(await texts(skipped, data)).toEqual(["that", " tail"]);
+    expect(await texts(skipped, data)).toEqual(["that tail"]);
+  });
+});
+
+const indentedBy = (n: number, text: string): string => `<w:p><w:pPr><w:ind w:left="${n}"/></w:pPr>${run(text)}</w:p>`;
+const shapes = async (body: string, d: unknown = data): Promise<string[]> => {
+  const out = paragraphs(await merge(body, d));
+  return out.map((t) => (t === "" ? "-" : t));
+};
+
+describe("empty paragraphs: which zero-output paragraphs Docmosis keeps", () => {
+  it("drops a paragraph of only block tags, an assignment or a blank op: field", async () => {
+    const b = para("a") + para("<<cs_t>><<es_>>") + para("<<$q=1>>") + para("<<op:empty>>") + para("<<$q=1>><<$r=2>>") + para("b");
+    expect(await shapes(b)).toEqual(["a", "b"]);
+  });
+
+  it("keeps a paragraph with a field that renders to nothing", async () => {
+    expect(await shapes(para("a") + para("<<empty>>") + para("<<empty>><<$q=1>>") + para("b"))).toEqual(["a", "-", "-", "b"]);
+  });
+
+  it("keeps a paragraph whose only literal text is in a block that is not taken", async () => {
+    expect(await shapes(para("a") + para("<<cs_f>>x<<es_>>") + para("<<rs_missing>>x<<es_>>") + para("b"))).toEqual(["a", "-", "-", "b"]);
+  });
+
+  it("keeps a paragraph that is only whitespace, or has whitespace after a tag, but not whitespace before the first tag", async () => {
+    expect(await shapes(para("a") + para(" ") + para("<<$q=1>> ") + para("<<cs_t>> <<es_>>") + para("b"))).toEqual(["a", " ", "-", "-", "b"]);
+    expect(await texts(para("<<$q=1>>  x") + para("<<empty>> y") + para("<<cs_t>> z<<es_>>") + para("  <<$q=1>> w"), data)).toEqual([" x", "y", "z", "   w"]);
+    expect(await shapes(para("a") + para(" <<$q=1>>") + para("b"))).toEqual(["a", "b"]);
+  });
+
+  it("keeps a paragraph whose tag has a space after the opening brackets", async () => {
+    expect(await shapes(para("a") + para("<< cs_t>>") + para("x") + para("<< es_>>") + para("b"))).toEqual(["a", "-", "x", "-", "b"]);
+  });
+
+  it("adds an empty paragraph after a block that ends in another paragraph when the opening paragraph has content", async () => {
+    const same = para("that<<cs_t>> A") + para("mid") + para("<<es_>>") + para("next");
+    expect(await shapes(same)).toEqual(["that A", "mid", "-", "next"]);
+    expect(await shapes(para("<<cs_t>>") + para("mid") + para("<<es_>>") + para("next"))).toEqual(["mid", "next"]);
+  });
+
+  it("adds an empty paragraph with the opener's properties, and splits the end paragraph, when the properties differ", async () => {
+    const b = indentedBy(100, "that<<cs_t>> A") + indentedBy(200, "mid") + indentedBy(300, "<<es_>> tail") + indentedBy(400, "next");
+    const out = await merge(b, data);
+    expect(paragraphs(out)).toEqual(["that A", "mid", "", "", "tail", "next"]);
+    expect(partXml(out).match(/w:left="(\d+)"/g)).toEqual(['w:left="100"', 'w:left="200"', 'w:left="300"', 'w:left="100"', 'w:left="300"', 'w:left="400"']);
+  });
+
+  it("keeps the text before a block that is not taken apart from the text after it when the properties differ", async () => {
+    const b = indentedBy(100, "that<<cs_f>> A") + indentedBy(200, "mid") + indentedBy(300, "<<es_>> tail");
+    expect(paragraphs(await merge(b, data))).toEqual(["that", "tail"]);
+  });
+
+  it("starts the paragraph an untaken block hides with an empty one when the opener has nothing before it", async () => {
+    expect(await shapes(indentedBy(100, "<<cs_f>> A") + indentedBy(200, "mid") + indentedBy(300, "<<es_>> tail"))).toEqual(["-", "tail"]);
+  });
+
+  it("adds the empty paragraph for a branch that is skipped when it opens at an else", async () => {
+    const b = indentedBy(100, "pre<<cs_t>>a") + indentedBy(200, "m<<else>>b") + indentedBy(300, "c<<es_>>post");
+    expect(await shapes(b)).toEqual(["prea", "m", "-", "-", "post"]);
+  });
+
+  it("repeats nothing extra per item, and one empty paragraph after the last", async () => {
+    const b = para("pre<<rs_l>>a<<$this>>") + para("mid") + para("<<es_>>");
+    expect(await shapes(b, { l: [1, 2] })).toEqual(["prea1", "mid", "a2", "mid", "-"]);
+  });
+
+  it("ends a document that ends in a table with an empty paragraph", async () => {
+    const out = await merge(table(row(cell(para("x")))), data);
+    expect(partXml(out)).toMatch(/<\/w:tbl><w:p><\/w:p><w:sectPr\/>/);
   });
 });
 
@@ -92,7 +160,7 @@ describe("a newline ends the paragraph", () => {
 
   it("splits a table cell paragraph", async () => {
     const out = await merge(table(row(cell(para("c1<<$nl>>c2")))), data);
-    expect(paragraphs(out)).toEqual(["c1", "c2"]);
+    expect(paragraphs(out)).toEqual(["c1", "c2", ""]);
   });
 });
 
@@ -151,7 +219,7 @@ describe("comments", () => {
 
   it("empties a table cell that holds a comment", async () => {
     const out = await merge(table(row(cell(para("a<</* c */>>")), cell(para("b")))), data);
-    expect(paragraphs(out)).toEqual(["", "b"]);
+    expect(paragraphs(out)).toEqual(["", "b", ""]);
   });
 
   it("keeps a paragraph that carries a section break, without its text", async () => {
@@ -243,7 +311,7 @@ describe("structural validation", () => {
 
   it("accepts a row else and tags inside nested blocks, text boxes and content controls", async () => {
     const t = table(row(cell(para("<<cr_t>>"))), row(cell(para("A"))), row(cell(para("<<else>>"))), row(cell(para("B"))), row(cell(para("<<er_>>"))));
-    expect(await texts(t, data)).toEqual(["A"]);
+    expect(await texts(t, data)).toEqual(["A", ""]);
     const box = `<w:r><w:pict><v:textbox><w:txbxContent>${para("<<es_>>")}</w:txbxContent></v:textbox></w:pict></w:r>`;
     expect((await fails(para("x", box)))[0]).toContain("Unmatched ending tag");
     const sdt = `<w:sdt><w:sdtContent>${para("<<es_>>")}</w:sdtContent></w:sdt>`;
