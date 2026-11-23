@@ -41,6 +41,6 @@
   },
   "resolutions": {
     "@types/node": "24.19.2",
-    "@opentelemetry/instrumentation-http": "0.222.0"
+    "@opentelemetry/instrumentation-http": "0.301.2"
   }
 }
